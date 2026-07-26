@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI批改助手</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<nav class="navbar"><a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 批改工作台</a><div class="navbar-nav"><a href="/teacher/dashboard" class="nav-link">返回首页</a><a href="/teacher/grading" class="nav-link">批改</a><a href="/teacher/student-feedback" class="nav-link">学生反馈</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+<h2 style="margin-bottom:24px">✍️ 批改工作台</h2>
+
+<div class="row">
+  <div class="col">
+    <div class="card"><div class="card-header">🤖 AI 代码评分</div>
+      <div class="form-group"><label>题目描述</label><textarea id="task-desc" rows="2" placeholder="如：编写函数实现斐波那契数列..."></textarea></div>
+      <div class="form-group"><label>学生代码</label><textarea id="code" rows="6" placeholder="粘贴学生提交的Python代码..."></textarea></div>
+      <button class="btn btn-primary" onclick="gradeCode()" style="width:100%">AI评分</button>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card"><div class="card-header">📝 手动评分</div>
+      <div class="form-group"><label>学生姓名</label><input type="text" id="manual-name" placeholder="如：张明轩" class="form-input"></div>
+      <div class="form-group"><label>章节</label><select id="manual-chapter"><option value="">-- 请选择 --</option>{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label>得分（0-100）</label><input type="number" id="manual-score" min="0" max="100" class="form-input"></div>
+      <div class="form-group"><label>评语（选填）</label><textarea id="manual-comment" rows="2" placeholder="给学生的评语..."></textarea></div>
+      <button class="btn btn-outline" onclick="manualGrade()" style="width:100%">登记分数</button>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card"><div class="card-header">🔍 Bug诊断</div>
+      <div class="form-group"><label>代码（含Bug）</label><textarea id="bug-code" rows="4" placeholder="粘贴有错误的代码..."></textarea></div>
+      <div class="form-group"><label>错误信息（可选）</label><input type="text" id="error-msg" placeholder="如：NameError"></div>
+      <button class="btn btn-outline" onclick="diagnoseBug()" style="width:100%">诊断Bug</button>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card"><div class="card-header">🔎 相似度检测</div>
+      <div class="form-group"><label>多份代码（用---分隔）</label><textarea id="code-list" rows="4" placeholder="代码1&#10;---&#10;代码2"></textarea></div>
+      <button class="btn btn-outline" onclick="checkSimilarity()" style="width:100%">检测</button>
+    </div>
+  </div>
+</div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在分析...</div>
+  <div class="content-area" id="result"></div>
+</div>
+
+<script>
+async function gradeCode(){
+  if(!document.getElementById('code').value.trim()){alert('请粘贴学生代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/grade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('code').value,task_description:document.getElementById('task-desc').value})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function diagnoseBug(){
+  if(!document.getElementById('bug-code').value.trim()){alert('请粘贴代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('bug-code').value,error_message:document.getElementById('error-msg').value})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function checkSimilarity(){
+  if(!document.getElementById('code-list').value.trim()){alert('请粘贴至少2份代码');return}
+  const codes=document.getElementById('code-list').value.split('---').filter(c=>c.trim());
+  if(codes.length<2){alert('请用---分隔至少2份代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/similarity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code_list:codes})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){
+      let html='<h3>相似度检测结果</h3><table><tr><th>代码A</th><th>代码B</th><th>相似度</th><th>等级</th></tr>';
+      d.data.suspicious.forEach(s=>{html+=`<tr><td>#${s.i+1}</td><td>#${s.j+1}</td><td>${(s.similarity*100).toFixed(0)}%</td><td>${s.level}</td></tr>`});
+      html+='</table>';
+      if(!d.data.suspicious.length) html+='<p style="color:green">未发现明显相似代码</p>';
+      document.getElementById('result').innerHTML=html;document.getElementById('result').classList.add('show');
+    }
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function manualGrade(){
+  const name=document.getElementById('manual-name').value;
+  const ch=document.getElementById('manual-chapter').value;
+  const score=document.getElementById('manual-score').value;
+  const comment=document.getElementById('manual-comment').value;
+  if(!name||!ch||!score){alert('请填写学生姓名、章节和分数');return}
+  document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/analytics/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grades:[{student_name:name,chapter_id:ch,exam_name:'手动批改',score:parseInt(score),question_type:'manual',ai_feedback:comment}]})});
+    const d=await r.json();
+    if(d.success){
+      document.getElementById('result').innerHTML='<div style="text-align:center;padding:20px;color:var(--student)">✅ 已登记 '+name+' 的分数：'+score+' 分</div>';
+      document.getElementById('result').classList.add('show');
+      document.getElementById('manual-name').value='';document.getElementById('manual-score').value='';document.getElementById('manual-comment').value='';
+    }else alert('登记失败: '+d.error);
+  }catch(e){alert('请求失败: '+e.message)}
+}
+</script>
+</body>
+</html>

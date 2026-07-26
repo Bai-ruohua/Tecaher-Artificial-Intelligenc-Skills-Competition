@@ -1,0 +1,22 @@
+<!-- 课程上下文选择条（所有教师页面共用） -->
+<div class="course-bar">
+  <span class="course-label">当前课程</span>
+  <select id="courseSelect" onchange="switchCourse(this.value)">
+    {% for c in courses %}
+    <option value="{{ c.id }}" {% if c.id == course_id %}selected{% endif %}>{{ c.course_name }}{% if c.semester %} ({{ c.semester }}){% endif %}</option>
+    {% endfor %}
+  </select>
+  <span class="course-name" id="courseName">{% if course %}{{ course.course_name }}{% else %}未选择课程{% endif %}</span>
+  {% if role == 'teacher' %}
+  <a href="/teacher/students" class="btn btn-outline btn-sm" style="margin-left:auto">+ 新建/管理课程</a>
+  {% endif %}
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function switchCourse(cid){
+  if(!cid) return;
+  await fetch('/api/course/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+</script>

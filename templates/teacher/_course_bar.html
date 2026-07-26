@@ -1,0 +1,215 @@
+<!-- 课程上下文选择条（所有教师页面共用） -->
+<div class="course-bar">
+  <span class="course-label">当前课程</span>
+  <select id="courseSelect" onchange="switchCourse(this.value)">
+    {% for c in courses %}
+    <option value="{{ c.id }}" {% if c.id == course_id %}selected{% endif %}>{{ c.course_name }}{% if c.semester %} ({{ c.semester }}){% endif %}</option>
+    {% endfor %}
+  </select>
+  <span class="course-name" id="courseName">{% if course %}{{ course.course_name }}{% else %}未选择课程{% endif %}</span>
+  {% if role == 'teacher' %}
+  <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="showNewCourseModal()">+ 新建课程</button>
+  <a href="/teacher/students" class="btn btn-outline btn-sm">管理学生</a>
+  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="showDeleteCourseModal()">🗑 删除</button>
+  {% endif %}
+</div>
+
+<!-- 新建课程弹窗 -->
+<div id="newCourseModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:14px;padding:28px;width:480px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+    <h3 style="margin-bottom:20px">📚 新建课程</h3>
+    <div class="form-group"><label>课程名称</label><input type="text" id="newCourseName" placeholder="如：Python程序设计" class="form-input" style="width:100%"></div>
+    <div class="form-group"><label>学期（选填）</label><input type="text" id="newCourseSemester" placeholder="如：2026春季" class="form-input" style="width:100%"></div>
+    <div class="form-group"><label>课程模板（选填，自动创建章节体系）</label>
+      <select id="newCourseTemplate" class="form-input" style="width:100%">
+        <option value="">-- 不选模板，后续自行创建 --</option>
+      </select>
+    </div>
+    <div class="form-group"><label>描述（选填）</label><textarea id="newCourseDesc" rows="2" placeholder="课程简介..." class="form-input" style="width:100%"></textarea></div>
+    <div class="form-group"><label>教材（选填，填写后生成内容更精准）</label><input type="text" id="newCourseTextbook" placeholder="如：《Python从入门到实践》" class="form-input" style="width:100%"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-outline" onclick="hideNewCourseModal()">取消</button>
+      <button class="btn btn-primary" onclick="createCourse()">创建课程</button>
+    </div>
+    <div id="newCourseStatus" style="margin-top:12px;font-size:13px;display:none"></div>
+  </div>
+</div>
+
+<style>
+/* 弹窗基础样式（覆盖全局） */
+#newCourseModal { display: none; }
+#newCourseModal.show { display: flex; }
+#deleteCourseModal { display: none; }
+#deleteCourseModal.show { display: flex; }
+.modal-input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; }
+</style>
+
+<script>
+var CURRENT_COURSE = {% if course_id %}{{ course_id }}{% else %}null{% endif %};
+async function switchCourse(cid){
+  if(!cid) return;
+  await fetch('/api/course/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+function showNewCourseModal(){
+  document.getElementById('newCourseModal').classList.add('show');
+  document.getElementById('newCourseStatus').style.display='none';
+  // 加载课程模板
+  fetch('/api/teacher/course-templates').then(r=>r.json()).then(d=>{
+    if(d.success){
+      const sel=document.getElementById('newCourseTemplate');
+      sel.innerHTML='<option value="">-- 不选模板，后续自行创建 --</option>';
+      d.templates.forEach(t=>{
+        sel.innerHTML+=`<option value="${t.name}">${t.name}（${t.chapters}章）- ${t.desc}</option>`;
+      });
+    }
+  }).catch(()=>{});
+}
+function hideNewCourseModal(){
+  document.getElementById('newCourseModal').classList.remove('show');
+}
+async function createCourse(){
+  const name=document.getElementById('newCourseName').value.trim();
+  if(!name){alert('请输入课程名称');return}
+  const semester=document.getElementById('newCourseSemester').value.trim();
+  const template=document.getElementById('newCourseTemplate').value;
+  const desc=document.getElementById('newCourseDesc').value.trim();
+  const textbook=document.getElementById('newCourseTextbook').value.trim();
+  const btn=document.querySelector('#newCourseModal .btn-primary');
+  btn.disabled=true;btn.textContent='创建中...';
+  const st=document.getElementById('newCourseStatus');
+  st.style.display='block';st.style.background='var(--bg-secondary)';st.textContent='正在创建...';
+  try{
+    const r=await(await fetch('/api/teacher/courses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_name:name,semester,description:desc,template,textbook})})).json();
+    if(r.success){
+      st.style.background='#ECFDF5';st.style.color='#065F46';
+      const cid=r.course_id;
+      st.innerHTML='✅ 课程创建成功！请选择知识库构建方式：'
+        + '<div style="display:flex;gap:12px;margin-top:16px">'
+        + '<a href="/teacher/knowledge?course_id='+cid+'" class="btn btn-outline" style="flex:1;text-align:center;padding:12px;font-size:14px" id="btnUpload">📂 上传课程资料</a>'
+        + '<button class="btn btn-primary" style="flex:1;padding:12px;font-size:14px" onclick="startAutoInit('+cid+')" id="btnAutoGen">🧠 基于知识图谱进行课程开发</button>'
+        + '</div>'
+        + '<div style="margin-top:8px;font-size:12px;opacity:0.6;text-align:center">💡 也可稍后在课程管理中补充知识库</div>';
+      // 禁用表单输入，但保留 buttons 可点击
+      document.getElementById('newCourseName').disabled = true;
+      document.getElementById('newCourseSemester').disabled = true;
+      document.getElementById('newCourseDesc').disabled = true;
+      document.getElementById('newCourseTemplate').disabled = true;
+    }else{
+      st.style.background='#FEF2F2';st.style.color='#991B1B';
+      st.textContent='❌ 创建失败: '+r.error;
+    }
+  }catch(e){
+    st.style.background='#FEF2F2';st.style.color='#991B1B';
+    st.textContent='❌ 请求失败: '+e.message;
+  }
+  btn.disabled=false;btn.textContent='创建课程';
+}
+
+// ===== 自动初始化课程知识库（用户点击"自动生成"或超时默认触发）=====
+async function startAutoInit(cid){
+  if(window._courseInitTimer) clearTimeout(window._courseInitTimer);
+  window._courseInitChoice = true;
+  hideNewCourseModal();
+  // 显示构建中的浮层
+  const ov = document.createElement('div');
+  ov.id = 'autoInitOverlay';
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column';
+  ov.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:36px 48px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2)">'
+    + '<div style="font-size:40px;margin-bottom:16px">🧠</div>'
+    + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">AI 正在构建课程知识框架...</div>'
+    + '<div style="font-size:14px;color:var(--text-secondary)">正在基于公开知识生成章节体系与知识文档，请稍候</div>'
+    + '<div style="margin-top:16px;width:200px;height:4px;background:var(--border);border-radius:4px;overflow:hidden">'
+    + '<div id="autoInitBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--primary),#818CF8);border-radius:4px;transition:width 0.5s"></div></div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  try {
+    const r = await fetch('/api/course/'+cid+'/auto-init', {method:'POST'});
+    const d = await r.json();
+    const bar = document.getElementById('autoInitBar');
+    if(bar) bar.style.width = '100%';
+    if(d.success){
+      ov.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:36px 48px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2)">'
+        + '<div style="font-size:48px;margin-bottom:12px">🎉</div>'
+        + '<div style="font-size:18px;font-weight:600;margin-bottom:4px;color:var(--success)">知识框架构建完成！</div>'
+        + '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">'
+        + '已生成 ' + (d.details?.chapters||0) + ' 个章节，' + (d.details?.documents||0) + ' 份知识文档</div>'
+        + '<button class="btn btn-primary" onclick="location.reload()">进入首页</button>'
+        + '</div>';
+    } else {
+      ov.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:36px 48px;text-align:center">'
+        + '<div style="font-size:48px;margin-bottom:12px">⚠️</div>'
+        + '<div style="font-size:16px;font-weight:600;margin-bottom:16px">自动构建遇到问题，请稍后手动上传课件</div>'
+        + '<button class="btn btn-primary" onclick="location.reload()">返回首页</button></div>';
+    }
+  } catch(e) {
+    const bar = document.getElementById('autoInitBar');
+    if(bar) bar.style.width = '100%';
+    const overlay = document.getElementById('autoInitOverlay');
+    if(overlay) document.body.removeChild(overlay);
+    location.reload();
+  }
+}
+</script>
+
+<!-- 删除课程确认弹窗 -->
+<div id="deleteCourseModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:14px;padding:28px;width:440px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+    <h3 style="margin-bottom:12px;color:var(--danger)">⚠️ 确认删除课程</h3>
+    <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px;line-height:1.6">
+      即将删除课程：<strong id="delCourseName">-</strong><br>
+      该操作将<strong style="color:var(--danger)">永久删除</strong>以下数据，且<strong style="color:var(--danger)">不可恢复</strong>：
+    </p>
+    <div id="delCascadeInfo" style="background:var(--bg-secondary);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.8">
+      章节体系 · 知识库 · 选课记录 · 成绩 · 答题记录 · 错题本 · 教案 · 题库 · AI 缓存
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="hideDeleteCourseModal()">取消</button>
+      <button class="btn" style="background:var(--danger);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer" onclick="confirmDeleteCourse()">确认永久删除</button>
+    </div>
+    <div id="delStatus" style="margin-top:12px;font-size:13px;display:none"></div>
+  </div>
+</div>
+
+<script>
+function showDeleteCourseModal(){
+  const sel = document.getElementById('courseSelect');
+  if(!sel || !sel.value){
+    alert('请先选择要删除的课程');
+    return;
+  }
+  const name = sel.options[sel.selectedIndex].text;
+  document.getElementById('delCourseName').textContent = name;
+  document.getElementById('deleteCourseModal').classList.add('show');
+  document.getElementById('delStatus').style.display = 'none';
+}
+function hideDeleteCourseModal(){
+  document.getElementById('deleteCourseModal').classList.remove('show');
+}
+async function confirmDeleteCourse(){
+  if(!confirm('⚠️ 此操作不可恢复！确定要继续吗？')) return;
+  const sel = document.getElementById('courseSelect');
+  const cid = parseInt(sel.value);
+  const st = document.getElementById('delStatus');
+  st.style.display = 'block';
+  st.style.background = 'var(--bg-secondary)';
+  st.textContent = '正在删除...';
+  const btn = document.querySelector('#deleteCourseModal .btn:last-child');
+  btn.disabled = true; btn.textContent = '删除中...';
+  try{
+    const r = await (await fetch('/api/teacher/courses/'+cid, {method:'DELETE'})).json();
+    if(r.success){
+      st.style.background = '#ECFDF5'; st.style.color = '#065F46';
+      st.innerHTML = '✅ 已删除：' + r.message;
+      setTimeout(() => { hideDeleteCourseModal(); location.reload(); }, 1500);
+    } else {
+      st.style.background = '#FEF2F2'; st.style.color = '#991B1B';
+      st.textContent = '❌ ' + (r.error || '删除失败');
+    }
+  }catch(e){
+    st.style.background = '#FEF2F2'; st.style.color = '#991B1B';
+    st.textContent = '❌ 请求失败: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = '确认永久删除';
+}
+</script>

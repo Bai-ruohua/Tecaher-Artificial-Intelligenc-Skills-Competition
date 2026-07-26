@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>课程助教 · RAG问答</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>.student body{background:var(--bg)}</style>
+</head>
+<body class="student">
+<nav class="navbar"><a href="/student/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 学生学习中心</a><div class="navbar-nav"><a href="/student/dashboard" class="nav-link">仪表盘</a><a href="/student/qa" class="nav-link">RAG问答</a><a href="/student/quiz" class="nav-link">刷题</a><a href="/student/digital" class="nav-link">数字人</a><a href="/student/graph" class="nav-link">知识图谱</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+  <div class="row">
+    <div class="col" style="flex:2">
+      <div class="card"><div class="card-header">💬 课程助教 — 基于课件的智能问答</div>
+        <div style="margin-bottom:12px"><select id="guide-select" onchange="askGuide(this.value)" style="width:auto;min-width:200px"><option value="">-- 导学问题示例 --</option></select></div>
+        <div class="form-group"><textarea id="question" rows="3" placeholder="输入你的问题，比如：什么是for循环？请举例说明。&#10;Python中列表和元组有什么区别？"></textarea></div>
+        <button class="btn btn-primary" onclick="ask()" style="width:100%">向助教提问</button>
+      </div>
+
+      <div class="loading" id="loading"><span class="spinner"></span>助教正在查阅课程资料...</div>
+
+      <div class="card" id="answer-card" style="display:none">
+        <div class="card-header">助教回答</div>
+        <div id="answer" class="content-area show" style="max-height:none"></div>
+        <div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text-secondary)">
+          <strong>参考来源：</strong><span id="sources">-</span>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card"><div class="card-header">📊 学习统计</div><div id="stats" style="color:var(--text-secondary)">加载中...</div></div>
+      <div class="card"><div class="card-header">⏱ 最近对话</div><div id="history" style="max-height:300px;overflow-y:auto;font-size:13px;color:var(--text-secondary)">加载中...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let chatHistory=[];
+const studentId='demo_student';
+
+async function loadChapters(){
+  const r=await fetch('/api/chapters');
+  const d=await r.json();
+  if(d.success){
+    const s=document.getElementById('guide-select');
+    d.chapters.forEach(c=>{
+      const o=document.createElement('option');o.value=c.id;o.text=c.title;s.appendChild(o);
+    });
+  }
+}
+
+async function askGuide(chapterId){
+  if(!chapterId)return;
+  const r=await fetch('/api/student/qa/guide/'+chapterId);
+  const d=await r.json();
+  if(d.success && d.questions.length>0) document.getElementById('question').value=d.questions[0];
+}
+
+async function ask(){
+  const q=document.getElementById('question').value.trim();
+  if(!q){alert('请输入问题');return}
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('answer-card').style.display='none';
+
+  const r=await fetch('/api/student/qa',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({student_id:studentId,question:q,history:chatHistory.slice(-6)})});
+  const d=await r.json();document.getElementById('loading').classList.remove('show');
+  if(d.success){
+    document.getElementById('answer').innerHTML=d.data.answer;
+    document.getElementById('sources').innerHTML=d.data.sources_text;
+    document.getElementById('answer-card').style.display='block';
+    chatHistory.push({role:'user',content:q});chatHistory.push({role:'assistant',content:d.data.answer});
+    document.getElementById('question').value='';
+    loadStats();loadHistory();
+  }else alert(d.error);
+}
+
+async function loadStats(){
+  const r=await fetch('/api/student/stats?student_id='+studentId);const d=await r.json();
+  if(d.success){
+    const s=d.stats;
+    document.getElementById('stats').innerHTML=`<p>答题总数：${s.total_attempts}题</p><p>正确率：${s.accuracy}%</p><p>错题本：${s.wrong_count}题</p><p>学习时长：${s.total_minutes}分钟</p>`;
+  }
+}
+async function loadHistory(){
+  const r=await fetch('/api/student/chat-history?student_id='+studentId+'&limit=5');const d=await r.json();
+  if(d.success){
+    document.getElementById('history').innerHTML=d.history.length
+      ? d.history.map(h=>`<p style="margin:4px 0"><b>${h.role==='user'?'Q':'A'}：</b>${h.content.substring(0,60)}...</p>`).join('')
+      : '<p>暂无对话记录</p>';
+  }
+}
+
+loadChapters();loadStats();loadHistory();
+</script>
+</body>
+</html>

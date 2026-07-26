@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python课程AI智能教学平台</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="navbar-brand">{{ config.SCHOOL_NAME }} · {{ config.COURSE_NAME }}AI智能教学平台</a>
+  <div class="navbar-nav">
+    <span style="font-size:13px;color:var(--text-secondary);margin-right:8px">{{ config.TEACHER_NAME }}老师</span>
+  </div>
+</nav>
+
+<div class="container">
+  <h2 style="margin-bottom:8px;font-size:20px">欢迎使用AI智能教学平台</h2>
+  <p style="color:var(--text-secondary);margin-bottom:24px">选择你的角色进入系统</p>
+
+  <!-- 角色选择 -->
+  <div class="mode-tabs" style="margin-bottom:32px">
+    <button class="mode-tab active" onclick="switchMode('teacher')" id="tab-teacher">教师端 — 减负工作台</button>
+    <button class="mode-tab" onclick="switchMode('student')" id="tab-student">学生端 — 智能学习Agent</button>
+  </div>
+
+  <!-- 教师端功能 -->
+  <div id="teacher-view">
+    <div class="feature-grid">
+      <a href="/teacher/lesson-prep" class="feature-card">
+        <div class="icon">📝</div>
+        <div class="title">AI备课助手</div>
+        <div class="desc">教案生成 · 课件大纲 · 思政融入 · 实训设计</div>
+      </a>
+      <a href="/teacher/exam" class="feature-card">
+        <div class="icon">📋</div>
+        <div class="title">AI命题助手</div>
+        <div class="desc">5种题型 · 难度控制 · 智能组卷 · 答案解析</div>
+      </a>
+      <a href="/teacher/grading" class="feature-card">
+        <div class="icon">✍️</div>
+        <div class="title">AI批改助手</div>
+        <div class="desc">代码评分 · Bug诊断 · 批量批改 · 相似度检测</div>
+      </a>
+      <a href="/teacher/analytics" class="feature-card">
+        <div class="icon">📊</div>
+        <div class="title">AI学情分析</div>
+        <div class="desc">趋势分析 · 风险预警 · 知识点掌握 · 教学建议</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- 学生端功能 -->
+  <div id="student-view" style="display:none">
+    <div class="feature-grid">
+      <a href="/student/qa" class="feature-card" style="border-left:3px solid var(--student)">
+        <div class="icon">💬</div>
+        <div class="title">课程助教 RAG问答</div>
+        <div class="desc">基于课件的智能问答 · 答案溯源到章节 · 不编造内容</div>
+      </a>
+      <a href="/student/quiz" class="feature-card" style="border-left:3px solid var(--student)">
+        <div class="icon">🎯</div>
+        <div class="title">刷题训练 Agent</div>
+        <div class="desc">按章节随机出题 · 即时判分解析 · 自动错题本</div>
+      </a>
+      <a href="/student/digital" class="feature-card" style="border-left:3px solid var(--student)">
+        <div class="icon">🎙️</div>
+        <div class="title">数字人助教讲解</div>
+        <div class="desc">克隆教师声音 · 数字人形象讲解 · 多模态学习</div>
+      </a>
+      <a href="/student/graph" class="feature-card" style="border-left:3px solid var(--student)">
+        <div class="icon">🕸️</div>
+        <div class="title">知识图谱</div>
+        <div class="desc">知识点关系可视化 · 点击回溯笔记 · 梳理课程脉络</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchMode(mode) {
+  document.getElementById('teacher-view').style.display = mode === 'teacher' ? 'block' : 'none';
+  document.getElementById('student-view').style.display = mode === 'student' ? 'block' : 'none';
+  document.getElementById('tab-teacher').classList.toggle('active', mode === 'teacher');
+  document.getElementById('tab-student').classList.toggle('active', mode === 'student');
+  document.body.classList.toggle('student', mode === 'student');
+}
+</script>
+</body>
+</html>

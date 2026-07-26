@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI备课助手</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+  <h2 style="margin-bottom:24px">📝 AI备课助手</h2>
+
+  <!-- 执行步骤提示 -->
+  <div class="step-indicator" id="stepIndicator" style="display:none">
+    <span class="step" id="step1">① 解析教学目标</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step2">② 匹配课程知识点</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step3">③ AI 生成内容</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step4">④ 格式校验</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step5">⑤ 生成完成</span>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div class="card-header">选择章节和功能</div>
+        <div class="form-group"><label>章节</label><select id="chapter"><option value="">-- 请选择章节 --</option>{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}（{{ ch.level }}）</option>{% endfor %}</select></div>
+        <div class="form-group"><label>功能</label><select id="func-type">
+          <option value="lesson_plan">教案生成（在线预览）</option>
+          <option value="lesson_plan_docx">📥 教案生成并下载（DOCX）</option>
+          <option value="courseware">课件大纲（在线预览）</option>
+          <option value="courseware_pptx">📥 课件生成并下载（PPTX）</option>
+          <option value="ideology">思政融入方案</option>
+          <option value="practice">分层实训设计</option>
+          <option value="teaching_plan">📥 整门课：授课计划（DOCX）</option>
+          <option value="course_lesson_plan">📥 整门课：教案全册（DOCX）</option>
+          <option value="curriculum_standard">📥 整门课：课程标准（DOCX）</option>
+        </select></div>
+        <div class="form-group"><label>额外要求（可选）</label><textarea id="extra" rows="2" placeholder="如：侧重实践操作、增加互动环节..."></textarea></div>
+        <button class="btn btn-primary" onclick="generate()" style="width:100%">开始生成</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="card-header">章节信息预览</div>
+        <div id="chapter-info" style="color:var(--text-secondary);font-size:14px">选择章节后可预览知识体系</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在生成内容...</div>
+  <div class="content-area" id="result"></div>
+</div>
+
+<script>
+const apiMap = {
+  lesson_plan:'/api/lesson-plan',
+  lesson_plan_docx:'/api/lesson-plan/download',
+  courseware:'/api/courseware',
+  courseware_pptx:'/api/courseware/download',
+  ideology:'/api/ideology',
+  practice:'/api/practice',
+  teaching_plan:'/api/teaching-plan/download',
+  course_lesson_plan:'/api/course-lesson-plan/download',
+  curriculum_standard:'/api/curriculum-standard/download'
+};
+
+// 整门课选项不需要选择章节
+document.getElementById('func-type').addEventListener('change', function(){
+  const noCh = ['teaching_plan','course_lesson_plan','curriculum_standard'];
+  document.getElementById('chapter').disabled = noCh.includes(this.value);
+  if(noCh.includes(this.value)){
+    document.getElementById('chapter').value = '';
+    document.getElementById('chapter-info').innerHTML = '整门课生成，无需选择具体章节';
+  }
+});
+
+document.getElementById('chapter').addEventListener('change', async function(){
+  if(!this.value){document.getElementById('chapter-info').innerHTML='选择章节后可预览知识体系';return}
+  const resp = await fetch('/api/chapter/'+this.value);
+  const data = await resp.json();
+  if(data.success){
+    const ch = data.chapter;
+    const objs = Array.isArray(ch.objectives) ? ch.objectives : (typeof ch.objectives === 'string' ? ch.objectives.split('、') : []);
+    const kps = Array.isArray(ch.key_points) ? ch.key_points : (typeof ch.key_points === 'string' ? ch.key_points.split('、') : []);
+    const dfs = Array.isArray(ch.difficulties) ? ch.difficulties : (typeof ch.difficulties === 'string' ? ch.difficulties.split('、') : []);
+    document.getElementById('chapter-info').innerHTML = `
+      <h4>${ch.title}</h4>
+      <p><strong>级别：</strong>${ch.level}</p>
+      <p><strong>教学目标：</strong>${objs.map(o=>'<br>  '+o).join('')}</p>
+      <p><strong>重点：</strong>${kps.map(p=>'<br>  '+p).join('')}</p>
+      <p><strong>难点：</strong>${dfs.map(d=>'<br>  '+d).join('')}</p>`;
+  }
+});
+
+async function generate(){
+  const ch = document.getElementById('chapter').value;
+  const func = document.getElementById('func-type').value;
+  const noCh = ['teaching_plan','course_lesson_plan','curriculum_standard'];
+  if(noCh.includes(func)){
+    // 整门课不需要选择章节
+  } else if(!ch){alert('请选择章节');return}
+  // 显示步骤提示
+  document.getElementById('stepIndicator').style.display='flex';
+  [1,2,3,4,5].forEach(i=>document.getElementById('step'+i).className='step');
+  await sleep(400); document.getElementById('step1').className='step active';
+  await sleep(800); document.getElementById('step1').className='step done';
+  document.getElementById('step2').className='step active';
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('result').classList.remove('show');
+  const body = {chapter_id:ch};
+  if(func==='lesson_plan' || func==='lesson_plan_docx') body.extra_requirements = document.getElementById('extra').value;
+  if(func==='courseware' || func==='courseware_pptx') body.lesson_plan_text = document.getElementById('extra').value;
+  if(func==='ideology') body.topic = document.getElementById('extra').value;
+  try{
+    document.getElementById('step2').className='step done';
+    document.getElementById('step3').className='step active';
+    const resp = await fetch(apiMap[func],{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    document.getElementById('step3').className='step done';
+    document.getElementById('step4').className='step active';
+    await sleep(300);
+    const data = await resp.json();
+    document.getElementById('step4').className='step done';
+    document.getElementById('loading').classList.remove('show');
+    if(data.success){
+      document.getElementById('step5').className='step active';
+      await sleep(500);
+      document.getElementById('step5').className='step done';
+      const el = document.getElementById('result');
+      // 处理 DOCX/PPTX 下载
+      if(func==='lesson_plan_docx' && data.download_url){
+        el.innerHTML = '<div style="padding:20px;text-align:center">'
+          + '<div style="font-size:48px;margin-bottom:12px">📄</div>'
+          + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">教案已生成！</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">文件已保存至服务器，点击下方按钮下载</div>'
+          + '<a href="'+data.download_url+'" class="btn btn-primary" download>📥 下载教案（DOCX）</a>'
+          + '</div>';
+      } else if(func==='teaching_plan' && data.download_url){
+        el.innerHTML = '<div style="padding:20px;text-align:center">'
+          + '<div style="font-size:48px;margin-bottom:12px">📋</div>'
+          + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">授课计划已生成！</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">整门课的授课计划已生成，点击下方按钮下载</div>'
+          + '<a href="'+data.download_url+'" class="btn btn-primary" download>📥 下载授课计划（DOCX）</a>'
+          + '</div>';
+      } else if(func==='course_lesson_plan' && data.download_url){
+        el.innerHTML = '<div style="padding:20px;text-align:center">'
+          + '<div style="font-size:48px;margin-bottom:12px">📚</div>'
+          + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">整门课教案已生成！（共'+(data.chapter_count||'N')+'章）</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">所有章节教案已合并到一个文档，点击下方按钮下载</div>'
+          + '<a href="'+data.download_url+'" class="btn btn-primary" download>📥 下载整门课教案（DOCX）</a>'
+          + '</div>';
+      } else if(func==='curriculum_standard' && data.download_url){
+        el.innerHTML = '<div style="padding:20px;text-align:center">'
+          + '<div style="font-size:48px;margin-bottom:12px">📜</div>'
+          + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">课程标准已生成！</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">课程标准已生成，点击下方按钮下载</div>'
+          + '<a href="'+data.download_url+'" class="btn btn-primary" download>📥 下载课程标准（DOCX）</a>'
+          + '</div>';
+      } else if(func==='courseware_pptx' && data.download_url){
+        el.innerHTML = '<div style="padding:20px;text-align:center">'
+          + '<div style="font-size:48px;margin-bottom:12px">📊</div>'
+          + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">课件已生成！（共'+data.slide_count+'页）</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">文件已保存至服务器，点击下方按钮下载</div>'
+          + '<a href="'+data.download_url+'" class="btn btn-primary" download>📥 下载课件（PPTX）</a>'
+          + '</div>';
+      } else {
+        el.innerHTML = data.content + '\n<span class="ai-tag">AI生成，仅供教师参考调整</span>';
+      }
+      el.classList.add('show');
+    }else{
+      alert('生成失败: '+(data.error||'未知错误'));
+    }
+  }catch(e){document.getElementById('loading').classList.remove('show');alert('请求失败: '+e.message)}
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+</script>
+</body>
+</html>

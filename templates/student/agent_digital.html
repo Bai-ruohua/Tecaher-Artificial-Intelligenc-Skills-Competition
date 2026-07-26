@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数字人助教讲解</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="student">
+<nav class="navbar">
+  <a href="{% if role == 'teacher' %}/teacher/dashboard{% else %}/student/dashboard{% endif %}" class="navbar-brand">{{ config.SCHOOL_NAME }}{% if role == 'teacher' %} · 教师工作台{% else %} · 学生学习中心{% endif %}</a>
+  <div class="navbar-nav">
+    {% if role == 'teacher' %}
+      <a href="/teacher/dashboard" class="nav-link">仪表盘</a>
+      <a href="/teacher/qa" class="nav-link">RAG问答</a>
+      <a href="/teacher/exam-preview" class="nav-link">出题</a>
+      <a href="/teacher/digital" class="nav-link">数字人</a>
+      <a href="/teacher/graph" class="nav-link">知识图谱</a>
+    {% else %}
+      <a href="/student/dashboard" class="nav-link">仪表盘</a>
+      <a href="/student/qa" class="nav-link">RAG问答</a>
+      <a href="/student/quiz" class="nav-link">刷题</a>
+      <a href="/student/digital" class="nav-link">数字人</a>
+      <a href="/student/graph" class="nav-link">知识图谱</a>
+    {% endif %}
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="row">
+    <div class="col">
+      <div class="card"><div class="card-header">🎙️ 数字人助教讲解</div>
+        <div class="form-group"><label>章节</label><select id="chapter">{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label>想问什么知识点？（可选，为空则讲解整章概览）</label><textarea id="topic" rows="2" placeholder="如：请讲解for循环的使用方法..."></textarea></div>
+        <div class="form-group"><label>生成方式</label><select id="method"><option value="auto">自动（优先缓存/预生成）</option><option value="sadtalker">SadTalker（离线高质量）</option><option value="did_api">D-ID API（云端生成）</option></select></div>
+        <button class="btn btn-primary" onclick="explain()" style="width:100%">让数字人讲解</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card"><div class="card-header">系统状态</div>
+        <div id="config-status" style="font-size:13px;color:var(--text-secondary)">检查中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在生成讲解内容...</div>
+
+  <div id="result-card" style="display:none">
+    <div class="card"><div class="card-header" id="result-title">讲解结果</div>
+      <div class="row">
+        <div class="col" style="flex:1"><div id="video-container" style="background:#1E293B;border-radius:8px;min-height:300px;display:flex;align-items:center;justify-content:center;color:#fff"><p>数字人视频加载中...</p></div></div>
+        <div class="col" style="flex:1">
+          <div class="card"><div class="card-header">讲解文字</div><div id="answer-text" class="content-area show" style="max-height:300px;overflow-y:auto"></div></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('video-container').querySelector('video')?.play()">▶ 重新播放</button>
+        <span id="gen-info" style="font-size:12px;color:var(--text-secondary)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadConfig(){
+  const r=await fetch('/api/student/digital/config');const d=await r.json();
+  if(d.success){
+    document.getElementById('config-status').innerHTML=`
+      <p>SadTalker：${d.has_sadtalker?'<span style="color:green">已配置</span>':'<span style="color:orange">未配置</span> (需部署SadTalker服务)'}</p>
+      <p>D-ID API：${d.has_did_api?'<span style="color:green">已配置</span>':'<span style="color:orange">未配置</span> (备选方案)'}</p>
+      <p style="font-size:12px;margin-top:8px">提示：两种方案至少配置一种才能生成数字人视频。未配置时将使用纯音频模式。</p>`;
+  }
+}
+
+async function explain(){
+  const ch=document.getElementById('chapter').value;
+  const topic=document.getElementById('topic').value.trim();
+  const method=document.getElementById('method').value;
+  document.getElementById('loading').classList.add('show');document.getElementById('result-card').style.display='none';
+
+  const r=await fetch('/api/student/digital/explain',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({student_id:'demo_student',chapter_id:ch,topic:topic||'请讲解这个章节的概览内容',method})});
+  const d=await r.json();document.getElementById('loading').classList.remove('show');
+  if(d.success){
+    const data=d.data;
+    document.getElementById('result-title').innerHTML=`数字人讲解 · ${data.method}`;
+    document.getElementById('answer-text').innerHTML=data.answer;
+    document.getElementById('gen-info').innerText=`生成方式：${data.method} ${data.fallback?'（降级为音频模式）':''}`;
+
+    const vc=document.getElementById('video-container');
+    if(data.video_path){
+      vc.innerHTML=`<video src="${data.video_path}" controls style="width:100%;max-height:400px;border-radius:8px"></video>`;
+    }else if(data.audio_path){
+      vc.innerHTML=`<div style="text-align:center;padding:40px"><p style="font-size:48px;margin-bottom:16px">👨‍🏫</p><p style="margin-bottom:12px">数字人视频未生成</p><audio src="${data.audio_path}" controls style="width:100%"></audio><p style="font-size:12px;margin-top:8px;color:#94A3B8">已降级为纯音频讲解</p></div>`;
+    }else{
+      vc.innerHTML=`<div style="text-align:center;padding:40px"><p style="font-size:48px;margin-bottom:16px">📝</p><p>数字人和音频均不可用</p><p style="font-size:12px;color:#94A3B8">请查看右侧讲解文字</p></div>`;
+    }
+    document.getElementById('result-card').style.display='block';
+  }else alert('生成失败: '+d.error);
+}
+
+loadConfig();
+</script>
+</body>
+</html>

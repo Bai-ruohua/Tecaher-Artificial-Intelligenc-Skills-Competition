@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>教师工作台 · {{ config.PLATFORM_NAME }} V{{ config.PLATFORM_VERSION }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/func.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+
+  <!-- 数据总览 -->
+  <div class="metric-row">
+    <div class="metric-card"><div class="metric-label">📊 累计节省</div><div class="metric-value" id="s-time">-</div><div class="metric-unit">小时</div></div>
+    <div class="metric-card"><div class="metric-label">📝 生成教案</div><div class="metric-value" id="s-lessons">-</div><div class="metric-unit">份</div></div>
+    <div class="metric-card"><div class="metric-label">✅ 批改作业</div><div class="metric-value" id="s-grades">-</div><div class="metric-unit">份</div></div>
+    <div class="metric-card"><div class="metric-label">👥 学生总数</div><div class="metric-value" id="m-total">-</div></div>
+  </div>
+
+  <!-- 功能区 3×3 -->
+  <div class="section-title"><span class="bar"></span>功能中心</div>
+  <div class="func-grid">
+    <a class="func-card c1" href="/teacher/knowledge">
+      <div class="fc-head">
+        <div class="fc-icon">📚</div>
+        <span class="fc-badge" id="badge-courses">-</span>
+      </div>
+      <div class="fc-title">课程管理</div>
+      <div class="fc-desc">知识库上传、章节管理、创建课程</div>
+    </a>
+    <a class="func-card c2" href="/teacher/students">
+      <div class="fc-head">
+        <div class="fc-icon">👥</div>
+        <span class="fc-badge" id="badge-students">-</span>
+      </div>
+      <div class="fc-title">学生管理</div>
+      <div class="fc-desc">批量生成学生账号、选课、查看名单</div>
+    </a>
+    <a class="func-card c3" href="/teacher/lesson-prep">
+      <div class="fc-head">
+        <div class="fc-icon">📝</div>
+        <span class="fc-badge" id="badge-lessons">-</span>
+      </div>
+      <div class="fc-title">智能备课</div>
+      <div class="fc-desc">AI 生成教案、课件大纲、思政融入、分层实训</div>
+    </a>
+    <a class="func-card c4" href="/teacher/qa">
+      <div class="fc-head">
+        <div class="fc-icon">💬</div>
+        <span class="fc-badge" id="badge-qa">-</span>
+      </div>
+      <div class="fc-title">AI 智能答疑</div>
+      <div class="fc-desc">基于课程知识库的 RAG 问答（师生共用）</div>
+    </a>
+    <a class="func-card c5" href="/teacher/exam-preview">
+      <div class="fc-head">
+        <div class="fc-icon">🎯</div>
+        <span class="fc-badge" id="badge-questions">-</span>
+      </div>
+      <div class="fc-title">智能出题与判分</div>
+      <div class="fc-desc">按章节出题、自动组卷、代码批改（师生共用）</div>
+    </a>
+    <a class="func-card c6" href="/teacher/digital">
+      <div class="fc-head">
+        <div class="fc-icon">🎙️</div>
+        <span class="fc-badge" id="badge-digital">-</span>
+      </div>
+      <div class="fc-title">数字人讲解</div>
+      <div class="fc-desc">生成知识点讲解数字人视频（师生共用）</div>
+    </a>
+    <a class="func-card c7" href="/teacher/graph">
+      <div class="fc-head">
+        <div class="fc-icon">🕸️</div>
+        <span class="fc-badge" id="badge-graph">-</span>
+      </div>
+      <div class="fc-title">知识图谱</div>
+      <div class="fc-desc">可视化课程知识网络与学习路径（师生共用）</div>
+    </a>
+    <a class="func-card c8" href="/teacher/grading">
+      <div class="fc-head">
+        <div class="fc-icon">✅</div>
+        <span class="fc-badge" id="badge-grades">-</span>
+      </div>
+      <div class="fc-title">代码批改</div>
+      <div class="fc-desc">单份/批量代码评分、Bug 诊断、相似度检测</div>
+    </a>
+    <a class="func-card c9" href="/teacher/analytics">
+      <div class="fc-head">
+        <div class="fc-icon">📊</div>
+        <span class="fc-badge" id="badge-analytics">-</span>
+      </div>
+      <div class="fc-title">学情看板</div>
+      <div class="fc-desc">排名 / 能力雷达 / 掌握甘特 综合洞察</div>
+    </a>
+    <a class="func-card c10" href="/teacher/internship">
+      <div class="fc-head">
+        <div class="fc-icon">📞</div>
+        <span class="fc-badge" id="badge-internship">新</span>
+      </div>
+      <div class="fc-title">顶岗实习沟通</div>
+      <div class="fc-desc">AI生成家长沟通文案、实习鉴定、预警通知</div>
+    </a>
+    <a class="func-card c11" href="/teacher/training-docs">
+      <div class="fc-head">
+        <div class="fc-icon">📁</div>
+        <span class="fc-badge" id="badge-training">新</span>
+      </div>
+      <div class="fc-title">实训资料整理</div>
+      <div class="fc-desc">成绩汇总、报告模板、资料目录自动生成</div>
+    </a>
+  </div>
+
+  <!-- 学情看板（可折叠） -->
+  <div class="section-title">
+    <span class="bar"></span>学情看板
+    <span class="overview-toggle" onclick="toggleOverview()" id="ovToggle">[ 收起 ]</span>
+  </div>
+  <div id="overview">
+    <div class="metric-row" style="margin-bottom:12px">
+      <div class="metric-card"><div class="metric-label">⚡ 活跃学生</div><div class="metric-value" id="m-active">-</div></div>
+      <div class="metric-card"><div class="metric-label">🎯 正确率</div><div class="metric-value" id="m-accuracy">-</div></div>
+      <div class="metric-card"><div class="metric-label">📈 综合得分</div><div class="metric-value" id="m-composite">-</div></div>
+      <div class="metric-card"><div class="metric-label">💬 答疑次数</div><div class="metric-value" id="s-qa">-</div></div>
+      <div class="metric-card"><div class="metric-label">📋 生成题目</div><div class="metric-value" id="s-questions">-</div></div>
+    </div>
+    <div class="dashboard-grid">
+      <div class="chart-card">
+        <div class="chart-title">班级能力雷达图</div>
+        <div class="chart-wrap"><div id="radarChart" style="width:100%;height:300px"></div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">综合分分布</div>
+        <div class="chart-wrap"><div id="distChart" style="width:100%;height:300px"></div></div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">学生综合排名</div>
+      <div style="overflow-x:auto">
+        <table class="rank-table" id="rankTable">
+          <thead>
+            <tr><th>排名</th><th>学号</th><th>姓名</th><th>班级</th><th style="width:160px">综合分</th><th style="width:120px">正确率</th><th>答题数</th><th>学习时长</th><th>错题数</th></tr>
+          </thead>
+          <tbody id="rankBody"><tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:32px">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function switchCourse(cid){
+  if(!cid) return;
+  await fetch('/api/course/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+function toggleOverview(){
+  const ov=document.getElementById('overview'), t=document.getElementById('ovToggle');
+  const hidden=ov.style.display==='none';
+  ov.style.display=hidden?'block':'none';
+  t.textContent=hidden?'[ 收起 ]':'[ 展开 ]';
+}
+
+// ===== ECharts 学情看板（合并接口 + localStorage 缓存）=====
+async function loadDashboard(){
+  const cid=CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'';
+  const cacheKey='dash_'+CURRENT_COURSE;
+  
+  // 检查 localStorage 缓存（30秒内有效）
+  try{
+    const cached=localStorage.getItem(cacheKey);
+    if(cached){
+      const parsed=JSON.parse(cached);
+      if(Date.now()-parsed.time<30000){
+        renderAll(parsed.data);
+        return;
+      }
+    }
+  }catch(e){}
+  
+  try{
+    const res=await(await fetch('/api/teacher/home'+cid)).json();
+    if(!res.success)return;
+    // 写入缓存
+    try{localStorage.setItem(cacheKey,JSON.stringify({data:res,time:Date.now()}));}catch(e){}
+    renderAll(res);
+  }catch(e){console.error(e);}
+}
+
+function renderAll(res){
+  const d=res.dashboard;
+  const grades=res.grades?.grades||[];
+  const stats=res.stats||{};
+  
+  // 顶部指标
+  document.getElementById('m-total').textContent=d.summary.total_students;
+  document.getElementById('m-active').textContent=d.summary.active_students;
+  document.getElementById('m-accuracy').textContent=d.summary.avg_accuracy+'%';
+  document.getElementById('m-composite').textContent=d.summary.avg_composite;
+  
+  // 学情指标
+  document.getElementById('m-active').textContent=d.summary.active_students;
+  document.getElementById('m-accuracy').textContent=d.summary.avg_accuracy+'%';
+  document.getElementById('m-composite').textContent=d.summary.avg_composite;
+  
+  // 减负大盘
+  const h=Math.floor((stats.lessons||0)*1.83+(stats.grades||0)*2.83+(stats.questions||0)*0.95+(stats.qa||0)*0.1);
+  document.getElementById('s-time').textContent=h;
+  document.getElementById('s-lessons').textContent=stats.lessons||0;
+  document.getElementById('s-grades').textContent=stats.grades||0;
+  document.getElementById('s-qa').textContent=stats.qa||0;
+  document.getElementById('s-questions').textContent=stats.questions||0;
+  
+  // 功能卡角标
+  const badgeMap={
+    'badge-courses':(stats.courses||0)+' 门课程','badge-students':(stats.students||0)+' 名学生',
+    'badge-lessons':(stats.lessons||0)+' 份教案','badge-qa':(stats.qa||0)+' 条问答',
+    'badge-questions':(stats.questions||0)+' 道题目','badge-digital':(stats.digital||0)+' 个缓存',
+    'badge-graph':(stats.graph||0)+' 个节点','badge-grades':(stats.grades||0)+' 份成绩',
+    'badge-analytics':(stats.analytics||0)+' 次答题',
+  };
+  for(const[id,val]of Object.entries(badgeMap)){
+    const el=document.getElementById(id);
+    if(el){el.textContent=val;if(parseInt(val)>0)el.classList.add('has-data');}
+  }
+  
+  // 学情图表
+  const dash=d;
+  renderRadar(dash.class_radar||[]);
+  renderRankings(dash.rankings||[]);
+  renderDistribution(grades);
+}
+
+function renderRadar(radar){
+  const el=document.getElementById('radarChart');
+  if(!radar||radar.length===0){el.innerHTML='<div style="text-align:center;color:var(--text-tertiary);padding:60px">暂无数据</div>';return;}
+  let chart=echarts.getInstanceByDom(el);
+  if(!chart)chart=echarts.init(el);
+  chart.setOption({
+    radar:{
+      indicator:radar.map(r=>({name:r.dimension||r.label,max:100})),
+      shape:'polygon',splitNumber:5,
+      axisName:{fontSize:12,color:'#64748B'},
+      splitArea:{areaStyle:{color:['rgba(79,70,229,0.02)','rgba(79,70,229,0.05)','rgba(79,70,229,0.08)','rgba(79,70,229,0.12)']}}
+    },
+    series:[{
+      type:'radar',symbol:'circle',symbolSize:6,
+      data:[{value:radar.map(r=>r.score),name:'班级平均',
+        areaStyle:{color:'rgba(79,70,229,0.2)'},
+        lineStyle:{color:'#4F46E5',width:2},
+        itemStyle:{color:'#4F46E5'}}]
+    }]
+  });
+  window.addEventListener('resize',()=>chart.resize());
+}
+
+function renderDistribution(grades){
+  const el=document.getElementById('distChart');
+  if(!grades||grades.length===0){
+    el.innerHTML='<div style="text-align:center;color:var(--text-tertiary);padding:60px">暂无成绩数据，导入成绩后显示</div>';
+    return;
+  }
+  const scores=grades.map(g=>parseFloat(g.score)).filter(s=>!isNaN(s));
+  if(scores.length===0){el.innerHTML='<div style="text-align:center;color:var(--text-tertiary);padding:60px">暂无有效成绩</div>';return;}
+  const dist=[{name:'优秀(≥90)',value:0,color:'#059669'},{name:'良好(75-89)',value:0,color:'#4F46E5'},{name:'及格(60-74)',value:0,color:'#D97706'},{name:'不及格(<60)',value:0,color:'#E11D48'}];
+  for(const s of scores){
+    if(s>=90)dist[0].value++;
+    else if(s>=75)dist[1].value++;
+    else if(s>=60)dist[2].value++;
+    else dist[3].value++;
+  }
+  let chart=echarts.getInstanceByDom(el);
+  if(!chart)chart=echarts.init(el);
+  chart.setOption({
+    tooltip:{trigger:'item',formatter:'{b}: {c}人 ({d}%)'},
+    series:[{
+      type:'pie',radius:['45%','70%'],avoidLabelOverlap:true,
+      label:{show:true,formatter:'{b}\n{c}人'},
+      emphasis:{label:{show:true,fontSize:14,fontWeight:'bold'}},
+      data:dist.map(d=>({value:d.value,name:d.name,itemStyle:{color:d.color}}))
+    }]
+  });
+  window.addEventListener('resize',()=>chart.resize());
+}
+
+function renderRankings(rankings){
+  const tb=document.getElementById('rankBody');
+  if(!rankings||rankings.length===0){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:32px">暂无学生数据</td></tr>';
+    return;
+  }
+  tb.innerHTML=rankings.map((r,i)=>{
+    const rank=i+1;
+    const bc=rank===1?'r1':rank===2?'r2':rank===3?'r3':'rn';
+    const cc=r.composite_score>=70?'good':r.composite_score>=50?'mid':'low';
+    const ac=r.accuracy>=70?'good':r.accuracy>=50?'mid':'low';
+    return `<tr>
+      <td><span class="rank-badge ${bc}">${rank}</span></td>
+      <td style="color:var(--text-secondary)">${r.student_no||'-'}</td>
+      <td style="font-weight:600">${r.student_name||'-'}</td>
+      <td style="color:var(--text-secondary)">${r.class_name||'-'}</td>
+      <td><div class="bar-wrap"><div class="bar-track"><div class="bar-fill ${cc}" style="width:${Math.min(r.composite_score,100)}%"></div></div><span class="bar-val">${r.composite_score}</span></div></td>
+      <td><div class="bar-wrap"><div class="bar-track"><div class="bar-fill ${ac}" style="width:${Math.min(r.accuracy,100)}%"></div></div><span class="bar-val">${r.accuracy}%</span></div></td>
+      <td>${r.total_attempts||0}</td>
+      <td>${r.study_minutes||0}min</td>
+      <td style="color:${(r.wrong_count||0)>3?'var(--danger)':'inherit'};font-weight:${(r.wrong_count||0)>3?'700':'400'}">${r.wrong_count||0}</td>
+    </tr>`;
+  }).join('');
+}
+
+loadDashboard();
+setInterval(loadDashboard,30000);  // 30秒自动刷新
+
+async function loadModuleStats(){
+  const url='/api/teacher/module-stats'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'');
+  try{
+    const json=await (await fetch(url)).json();
+    if(!json.success)return;
+    const s=json.stats;
+    const map={
+      'badge-courses': s.courses+' 门课程',
+      'badge-students': s.students+' 名学生',
+      'badge-lessons': s.lessons+' 份教案',
+      'badge-qa': s.qa+' 条问答',
+      'badge-questions': s.questions+' 道题目',
+      'badge-digital': s.digital+' 个缓存',
+      'badge-graph': s.graph+' 个节点',
+      'badge-grades': s.grades+' 份成绩',
+      'badge-analytics': s.analytics+' 次答题',
+    };
+    for(const[id,val]of Object.entries(map)){
+      const el=document.getElementById(id);
+      if(el){
+        el.textContent=val;
+        const n=parseInt(val);
+        if(n>0)el.classList.add('has-data');
+      }
+    }
+    // 减负数据大盘
+    const h=Math.floor((s.lessons*1.83)+(s.grades*2.83)+(s.questions*0.95)+(s.qa*0.1));
+    document.getElementById('s-time').textContent=h;
+    document.getElementById('s-lessons').textContent=s.lessons;
+    document.getElementById('s-grades').textContent=s.grades;
+    document.getElementById('s-qa').textContent=s.qa;
+    document.getElementById('s-questions').textContent=s.questions;
+  }catch(e){console.error('module-stats error',e);}
+}
+</script>
+</body>
+</html>

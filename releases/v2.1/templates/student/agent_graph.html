@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识图谱</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/dist/vis-network.min.js"></script>
+</head>
+<body class="student">
+<nav class="navbar"><a href="/student/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 学生学习中心</a><div class="navbar-nav"><a href="/student/dashboard" class="nav-link">仪表盘</a><a href="/student/qa" class="nav-link">RAG问答</a><a href="/student/quiz" class="nav-link">刷题</a><a href="/student/digital" class="nav-link">数字人</a><a href="/student/graph" class="nav-link">知识图谱</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+  <div class="row">
+    <div class="col" style="flex:2">
+      <div class="graph-container" id="graph"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card"><div class="card-header">📌 节点详情</div><div id="node-detail" style="font-size:13px;color:var(--text-secondary)">点击图谱中的节点查看详情</div></div>
+      <div class="card"><div class="card-header">图例</div>
+        <div style="font-size:12px">
+          <p><span style="display:inline-block;width:12px;height:12px;background:#639922;border-radius:50%;vertical-align:middle"></span> 入门</p>
+          <p><span style="display:inline-block;width:12px;height:12px;background:#1D9E75;border-radius:50%;vertical-align:middle"></span> 基础</p>
+          <p><span style="display:inline-block;width:12px;height:12px;background:#378ADD;border-radius:50%;vertical-align:middle"></span> 进阶</p>
+          <p><span style="display:inline-block;width:12px;height:12px;background:#D85A30;border-radius:50%;vertical-align:middle"></span> 综合</p>
+          <p style="margin-top:8px">— 实线 = 前置知识 · - - 虚线 = 后续章节</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadGraph(){
+  const r=await fetch('/api/student/graph/data');
+  const d=await r.json();
+  if(!d.success)return alert('图谱数据加载失败');
+
+  const nodes=new vis.DataSet(d.data.nodes.map(n=>({
+    id:n.id,label:n.label,
+    shape:'dot',size:n.size||40,
+    color:{background:n.color||'#378ADD',border:'#fff'},
+    title:`<b>${n.fullLabel}</b><br>${n.level}<br>关键词：${(n.keywords||[]).join('、')}`,
+    font:{size:12,color:'#1E293B',face:'Microsoft YaHei'},
+    borderWidth:2
+  })));
+
+  const edges=new vis.DataSet(d.data.edges.map(e=>({
+    from:e.from,to:e.to,label:e.label,
+    arrows:'to',dashes:e.dashes,
+    color:{color:e.color||'#888780'},
+    font:{size:10,color:'#64748B'}
+  })));
+
+  const container=document.getElementById('graph');
+  const network=new vis.Network(container,{nodes,edges},{
+    physics:{stabilization:{iterations:100},solver:'forceAtlas2Based'},
+    interaction:{hover:true,tooltipDelay:100},
+    layout:{improvedLayout:false}
+  });
+
+  network.on('click',async function(params){
+    if(params.nodes.length>0){
+      const nodeId=params.nodes[0];
+      const r=await fetch('/api/student/graph/detail/'+nodeId);
+      const d=await r.json();
+      if(d.success){
+        const data=d.data;
+        let html=`<h4>${data.chapter.title}</h4>`;
+        html+=`<p><b>级别：</b>${data.chapter.level}</p>`;
+        html+=`<p><b>重点：</b>${data.key_points.map(p=>'<br>  '+p).join('')}</p>`;
+        html+=`<p><b>难点：</b>${data.difficulties.map(p=>'<br>  '+p).join('')}</p>`;
+        if(data.prerequisites.length)html+=`<p><b>前置章节：</b>${data.prerequisites.join(', ')}</p>`;
+        if(data.leads_to.length)html+=`<p><b>后续章节：</b>${data.leads_to.join(', ')}</p>`;
+        html+=`<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="window.open('/student/qa','_self')">去RAG问答详细了解 →</button>`;
+        document.getElementById('node-detail').innerHTML=html;
+      }
+    }
+  });
+}
+
+loadGraph();
+</script>
+</body>
+</html>

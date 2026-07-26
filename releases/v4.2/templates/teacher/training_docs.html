@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实训资料整理</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.doc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.doc-card h4 { margin-bottom: 8px; }
+.doc-card .meta { font-size: 12px; color: var(--text-secondary); }
+.output-area { background: var(--bg); border-radius: var(--radius); padding: 16px; margin-top: 12px; white-space: pre-wrap; font-size: 14px; line-height: 1.8; max-height: 500px; overflow-y: auto; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.stat-item { text-align: center; padding: 12px; background: var(--bg-secondary); border-radius: 8px; }
+.stat-item .num { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-item .label { font-size: 12px; color: var(--text-secondary); }
+.func-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.func-tab { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 14px; }
+.func-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 实训资料整理</a>
+  <div class="navbar-nav">
+    <a href="/teacher/dashboard" class="nav-link">返回首页</a>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+
+  <div class="card">
+    <div class="card-header">功能选择</div>
+    <div class="func-tabs">
+      <div class="func-tab active" data-func="summary" onclick="switchFunc(this)">成绩汇总</div>
+      <div class="func-tab" data-func="template" onclick="switchFunc(this)">报告模板</div>
+      <div class="func-tab" data-func="catalog" onclick="switchFunc(this)">资料目录</div>
+    </div>
+  </div>
+
+  <!-- 成绩汇总 -->
+  <div id="func-summary" class="func-section">
+    <div class="card">
+      <div class="card-header">实训成绩汇总</div>
+      <div class="stat-grid" id="statsGrid" style="display:none">
+        <div class="stat-item"><div class="num" id="statTotal">0</div><div class="label">总人数</div></div>
+        <div class="stat-item"><div class="num" id="statAvg">0</div><div class="label">平均分</div></div>
+        <div class="stat-item"><div class="num" id="statPassed">0</div><div class="label">及格人数</div></div>
+        <div class="stat-item"><div class="num" id="statRate">0%</div><div class="label">及格率</div></div>
+      </div>
+      <button class="btn btn-primary" onclick="generateSummary()">生成成绩汇总表</button>
+      <div id="loadingSummary" class="loading" style="display:none">
+        <span class="spinner"></span>正在生成...
+      </div>
+      <div class="output-area" id="summaryOutput" style="display:none"></div>
+      <div style="margin-top:8px;text-align:right">
+        <span class="ai-tag">AI生成，仅供参考调整</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 报告模板 -->
+  <div id="func-template" class="func-section" style="display:none">
+    <div class="card">
+      <div class="card-header">生成实训报告模板</div>
+      <div class="form-group"><label>课程名称</label><input type="text" id="templateCourse" value="Python程序设计" class="form-input"></div>
+      <div class="form-group"><label>实训章节</label><input type="text" id="templateChapter" placeholder="如：数据分析与可视化" class="form-input"></div>
+      <div class="form-group"><label>学生姓名</label><input type="text" id="templateStudent" placeholder="如：张明轩" class="form-input"></div>
+      <div class="form-group"><label>特殊要求（选填）</label><textarea id="templateReq" rows="2" placeholder="如：侧重数据分析流程..." class="form-input"></textarea></div>
+      <button class="btn btn-primary" onclick="generateTemplate()">生成报告模板</button>
+      <div id="loadingTemplate" class="loading" style="display:none">
+        <span class="spinner"></span>正在生成...
+      </div>
+      <div class="output-area" id="templateOutput" style="display:none"></div>
+      <div style="margin-top:8px;text-align:right">
+        <span class="ai-tag">AI生成，仅供参考调整</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 资料目录 -->
+  <div id="func-catalog" class="func-section" style="display:none">
+    <div class="card">
+      <div class="card-header">实训资料目录</div>
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-secondary)">
+        共 {{ demo_files|length }} 个文件
+      </div>
+      <button class="btn btn-primary" onclick="generateCatalog()">生成目录清单</button>
+      <div id="loadingCatalog" class="loading" style="display:none">
+        <span class="spinner"></span>正在生成...
+      </div>
+      <div class="output-area" id="catalogOutput" style="display:none"></div>
+      <div style="margin-top:8px;text-align:right">
+        <span class="ai-tag">AI生成，仅供参考调整</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function switchFunc(el) {
+  document.querySelectorAll('.func-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.func-section').forEach(s => s.style.display = 'none');
+  document.getElementById('func-' + el.dataset.func).style.display = 'block';
+}
+
+function generateSummary() {
+  document.getElementById('loadingSummary').style.display = 'block';
+  document.getElementById('summaryOutput').style.display = 'none';
+
+  fetch('/api/training/summary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ students: {{ demo_grades|tojson }} })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('loadingSummary').style.display = 'none';
+    document.getElementById('summaryOutput').style.display = 'block';
+    if (data.success) {
+      document.getElementById('summaryOutput').textContent = data.content;
+      if (data.stats) {
+        document.getElementById('statsGrid').style.display = 'grid';
+        document.getElementById('statTotal').textContent = data.stats.total;
+        document.getElementById('statAvg').textContent = data.stats.avg_score;
+        document.getElementById('statPassed').textContent = data.stats.passed;
+        document.getElementById('statRate').textContent = data.stats.pass_rate + '%';
+      }
+    } else {
+      document.getElementById('summaryOutput').textContent = '生成失败：' + (data.error || '未知错误');
+    }
+  })
+  .catch(e => {
+    document.getElementById('loadingSummary').style.display = 'none';
+    document.getElementById('summaryOutput').style.display = 'block';
+    document.getElementById('summaryOutput').textContent = '请求失败：' + e.message;
+  });
+}
+
+function generateTemplate() {
+  const course = document.getElementById('templateCourse').value;
+  const chapter = document.getElementById('templateChapter').value;
+  const student = document.getElementById('templateStudent').value;
+  const req = document.getElementById('templateReq').value;
+  if (!chapter || !student) { alert('请填写章节和学生姓名'); return; }
+
+  document.getElementById('loadingTemplate').style.display = 'block';
+  document.getElementById('templateOutput').style.display = 'none';
+
+  fetch('/api/training/report-template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ course_name: course, chapter_title: chapter, student_name: student, requirements: req })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('loadingTemplate').style.display = 'none';
+    document.getElementById('templateOutput').style.display = 'block';
+    if (data.success) {
+      document.getElementById('templateOutput').textContent = data.content;
+    } else {
+      document.getElementById('templateOutput').textContent = '生成失败：' + (data.error || '未知错误');
+    }
+  })
+  .catch(e => {
+    document.getElementById('loadingTemplate').style.display = 'none';
+    document.getElementById('templateOutput').style.display = 'block';
+    document.getElementById('templateOutput').textContent = '请求失败：' + e.message;
+  });
+}
+
+function generateCatalog() {
+  document.getElementById('loadingCatalog').style.display = 'block';
+  document.getElementById('catalogOutput').style.display = 'none';
+
+  fetch('/api/training/summary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ students: [] })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('loadingCatalog').style.display = 'none';
+    document.getElementById('catalogOutput').style.display = 'block';
+    // Generate catalog locally
+    var files = {{ demo_files|tojson }};
+    var text = '## 实训资料目录\n\n';
+    files.forEach(function(f, i) {
+      text += (i+1) + '. ' + f.name + ' - ' + f.desc + ' (' + f.size + ')\n';
+    });
+    document.getElementById('catalogOutput').textContent = text;
+  })
+  .catch(e => {
+    document.getElementById('loadingCatalog').style.display = 'none';
+    document.getElementById('catalogOutput').style.display = 'block';
+    document.getElementById('catalogOutput').textContent = '请求失败：' + e.message;
+  });
+}
+</script>
+</body>
+</html>

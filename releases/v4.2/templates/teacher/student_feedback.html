@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生反馈 · {{ config.PLATFORM_NAME }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.feedback-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.feedback-card .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.feedback-card .name { font-weight: 600; font-size: 14px; }
+.feedback-card .meta { font-size: 12px; color: var(--text-secondary); }
+.feedback-card .body { font-size: 13px; line-height: 1.6; }
+.score-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.score-high { background: #DCFCE7; color: #166534; }
+.score-mid { background: #FEF3C7; color: #92400E; }
+.score-low { background: #FEE2E2; color: #991B1B; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 16px; background: var(--border); border-radius: 10px; padding: 3px; }
+.tab-btn { flex: 1; text-align: center; padding: 8px; border-radius: 8px; font-size: 13px; border: none; background: transparent; cursor: pointer; color: var(--text-secondary); }
+.tab-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 学生反馈</a>
+  <div class="navbar-nav">
+    <a href="/teacher/dashboard" class="nav-link">返回首页</a>
+    <a href="/teacher/grading" class="nav-link">批改</a>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+
+<div class="tab-bar">
+  <div class="tab-btn active" data-tab="grades" onclick="switchTab(this)">成绩记录</div>
+  <div class="tab-btn" data-tab="attempts" onclick="switchTab(this)">答题记录</div>
+  <div class="tab-btn" data-tab="students" onclick="switchTab(this)">学生列表</div>
+</div>
+
+<div id="tab-grades" class="tab-content">
+  <div class="card">
+    <div class="card-header">📊 成绩记录 <span style="margin-left:auto;font-size:12px;color:var(--text-secondary)" id="gradeCount">加载中...</span></div>
+    <div id="gradeList"><div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载中...</div></div>
+  </div>
+</div>
+
+<div id="tab-attempts" class="tab-content" style="display:none">
+  <div class="card">
+    <div class="card-header">📝 答题记录</div>
+    <div id="attemptList"><div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载中...</div></div>
+  </div>
+</div>
+
+<div id="tab-students" class="tab-content" style="display:none">
+  <div class="card">
+    <div class="card-header">👥 学生列表</div>
+    <div id="studentList"><div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载中...</div></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function loadGrades(){
+  try{
+    const r=await(await fetch('/api/analytics/db-grades'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:''))).json();
+    if(!r.success)throw new Error(r.error);
+    document.getElementById('gradeCount').textContent='共 '+r.count+' 条';
+    const el=document.getElementById('gradeList');
+    if(!r.grades||r.grades.length===0){el.innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">暂无成绩</div>';return;}
+    el.innerHTML=r.grades.slice(0,50).map(g=>{
+      const sc=parseInt(g.score);
+      const sb=sc>=80?'score-high':sc>=60?'score-mid':'score-low';
+      return `<div class="feedback-card"><div class="header"><span class="name">${g.student_name||'未知'}</span><span class="score-badge ${sb}">${g.score}分</span></div><div class="meta">${g.exam_name||'练习'} · ${g.chapter_id||'未知章节'} · ${g.created_at||''}</div>${g.ai_feedback?'<div class="body" style="margin-top:6px">💬 '+g.ai_feedback+'</div>':''}</div>`;
+    }).join('');
+  }catch(e){document.getElementById('gradeList').innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载失败</div>';}
+}
+
+async function loadAttempts(){
+  try{
+    const r=await(await fetch('/api/teacher/dashboard'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:''))).json();
+    if(!r.success)throw new Error(r.error);
+    const el=document.getElementById('attemptList');
+    const rankings=r.data.rankings||[];
+    if(!rankings.length){el.innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">暂无答题记录</div>';return;}
+    el.innerHTML=rankings.map(s=>`<div class="feedback-card"><div class="header"><span class="name">${s.student_name}</span><span class="meta">答题 ${s.total_attempts}次 · 正确率 ${s.accuracy}%</span></div><div class="body">综合分 ${s.composite_score} · 错题 ${s.wrong_count}题 · 学习 ${s.study_minutes}min</div></div>`).join('');
+  }catch(e){document.getElementById('attemptList').innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载失败</div>';}
+}
+
+async function loadStudents(){
+  try{
+    const r=await(await fetch('/api/teacher/dashboard'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:''))).json();
+    if(!r.success)throw new Error(r.error);
+    const el=document.getElementById('studentList');
+    const rankings=r.data.rankings||[];
+    if(!rankings.length){el.innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">暂无学生数据</div>';return;}
+    el.innerHTML=rankings.map(s=>`<div class="feedback-card"><div class="header"><span class="name">${s.student_name}</span><span class="meta">${s.class_name||'未分班'}</span></div><div class="body">📊 综合分 ${s.composite_score} · 🎯 正确率 ${s.accuracy}% · 📝 答题 ${s.total_attempts}次 · ❌ 错题 ${s.wrong_count}题</div></div>`).join('');
+  }catch(e){document.getElementById('studentList').innerHTML='<div class="feedback-card" style="text-align:center;color:var(--text-tertiary)">加载失败</div>';}
+}
+
+function switchTab(el){
+  document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+  document.getElementById('tab-'+el.dataset.tab).style.display='block';
+}
+
+loadGrades();loadAttempts();loadStudents();
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>顶岗实习家校沟通</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.internship-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.student-select { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-bottom: 16px; }
+.student-btn { padding: 10px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; text-align: left; font-size: 13px; transition: all 0.2s; }
+.student-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+.student-btn.selected { border-color: var(--primary); background: var(--primary-light); font-weight: 600; }
+.scenario-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.scenario-tab { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 13px; }
+.scenario-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.output-area { background: var(--bg); border-radius: var(--radius); padding: 16px; margin-top: 12px; white-space: pre-wrap; font-size: 14px; line-height: 1.8; min-height: 120px; }
+.copy-btn { float: right; padding: 4px 12px; font-size: 12px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 顶岗实习家校沟通</a>
+  <div class="navbar-nav">
+    <a href="/teacher/dashboard" class="nav-link">返回首页</a>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+  <div class="card">
+    <div class="card-header">选择学生</div>
+    <div class="student-select" id="studentList">
+      {% for s in students %}
+      <div class="student-btn" data-name="{{ s.name }}" data-position="{{ s.position }}" data-company="{{ s.company }}" onclick="selectStudent(this)">
+        <strong>{{ s.name }}</strong><br>
+        <small style="color:var(--text-secondary)">{{ s.position }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">选择沟通场景</div>
+    <div class="scenario-tabs">
+      <div class="scenario-tab active" data-scenario="daily" onclick="selectScenario(this)">日常实习反馈</div>
+      <div class="scenario-tab" data-scenario="warning" onclick="selectScenario(this)">风险预警通知</div>
+      <div class="scenario-tab" data-scenario="evaluation" onclick="selectScenario(this)">实习鉴定告知</div>
+    </div>
+  </div>
+
+  <div class="card" id="extraInfo">
+    <div class="card-header">补充信息</div>
+    <div class="form-group">
+      <label id="extraLabel">本周表现（选填）</label>
+      <textarea id="extraInput" rows="2" placeholder="输入补充信息..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="generate()" style="width:100%">生成沟通文案</button>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <div class="card-header">
+      生成结果
+      <span class="ai-tag" style="margin-left:8px">AI生成，仅供参考调整</span>
+    </div>
+    <div id="loading" class="loading" style="display:none">
+      <span class="spinner"></span>正在生成沟通文案...
+    </div>
+    <div class="output-area" id="output"></div>
+    <div style="margin-top:8px;text-align:right">
+      <span id="scenarioLabel" class="tag tag-pending"></span>
+      <button class="btn btn-sm btn-outline" onclick="copyResult()">复制文案</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedStudent = null;
+let selectedScenario = 'daily';
+
+function selectStudent(el) {
+  document.querySelectorAll('.student-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedStudent = { name: el.dataset.name, position: el.dataset.position, company: el.dataset.company };
+  document.getElementById('resultCard').style.display = 'none';
+}
+
+function selectScenario(el) {
+  document.querySelectorAll('.scenario-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedScenario = el.dataset.scenario;
+  const labels = { 'daily': '本周表现（选填）', 'warning': '异常情况描述', 'evaluation': '实习评价与建议（选填）' };
+  document.getElementById('extraLabel').textContent = labels[selectedScenario] || '';
+  document.getElementById('resultCard').style.display = 'none';
+}
+
+function generate() {
+  if (!selectedStudent) { alert('请先选择学生'); return; }
+  const btn = document.querySelector('.btn-primary');
+  btn.disabled = true;
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('output').textContent = '';
+
+  fetch('/api/internship/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...selectedStudent,
+      scenario: selectedScenario,
+      performance: document.getElementById('extraInput').value
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('resultCard').style.display = 'block';
+    if (data.success) {
+      document.getElementById('output').textContent = data.content;
+      document.getElementById('scenarioLabel').textContent = data.scenario;
+    } else {
+      document.getElementById('output').textContent = '生成失败：' + (data.error || '未知错误');
+    }
+  })
+  .catch(e => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('resultCard').style.display = 'block';
+    document.getElementById('output').textContent = '请求失败：' + e.message;
+  })
+  .finally(() => { btn.disabled = false; });
+}
+
+function copyResult() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('文案已复制到剪贴板');
+  }).catch(() => {
+    alert('复制失败，请手动选择复制');
+  });
+}
+</script>
+</body>
+</html>

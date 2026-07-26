@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI学情分析</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<nav class="navbar"><a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 教师工作台</a><div class="navbar-nav"><a href="/teacher/dashboard" class="nav-link">仪表盘</a><a href="/teacher/lesson-prep" class="nav-link">备课</a><a href="/teacher/exam" class="nav-link">命题</a><a href="/teacher/grading" class="nav-link">批改</a><a href="/teacher/analytics" class="nav-link">学情</a><a href="/teacher/students" class="nav-link">学生管理</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+  <h2 style="margin-bottom:24px">📊 AI学情分析</h2>
+
+  <div class="card"><div class="card-header">导入成绩数据（JSON格式）</div>
+    <div class="row">
+      <div class="col"><div class="form-group"><label>班级名称</label><input type="text" id="className" placeholder="如：2025级计应1班"></div></div>
+      <div class="col"><div class="form-group"><label>成绩数据（每行一个学生JSON）</label><textarea id="gradesInput" rows="6" placeholder='每行格式：&#10;{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch04","score":85}'>{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch04","score":85}</textarea></div></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="importGrades()">导入数据</button>
+      <button class="btn btn-outline btn-sm" onclick="loadDemo()">加载示例数据</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col"><div class="card"><div class="card-header">班级趋势分析</div><button class="btn btn-outline" onclick="analyzeTrend()" style="width:100%">分析趋势</button><div id="trend-result" class="content-area"></div></div></div>
+    <div class="col"><div class="card"><div class="card-header">风险学生预警</div><button class="btn btn-outline" onclick="checkRisk()" style="width:100%">检测预警</button><div id="risk-result" class="content-area"></div></div></div>
+  </div>
+  <div class="card"><div class="card-header">知识点掌握度 + 完整报告</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="analyzeMastery()">知识点掌握度</button>
+      <button class="btn btn-primary" onclick="generateReport()">生成完整学情报告</button>
+    </div>
+    <div id="mastery-result" class="content-area"></div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI分析中...</div>
+</div>
+
+<script>
+let storedGrades=[];
+
+async function importGrades(){
+  const input=document.getElementById('gradesInput').value.trim();
+  if(!input){alert('请输入成绩数据');return}
+  storedGrades=input.split('\n').filter(l=>l.trim()).map(l=>{
+    try{return JSON.parse(l)}catch(e){return null}
+  }).filter(g=>g!==null);
+  document.getElementById('loading').classList.add('show');
+  const r=await fetch('/api/analytics/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grades:storedGrades})});
+  const d=await r.json();document.getElementById('loading').classList.remove('show');
+  alert(d.success?`成功导入${d.imported}条记录`:'导入失败');
+}
+
+function loadDemo(){
+  const demos=['{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":85}',
+  '{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":72}',
+  '{"student_no":"2025002","student_name":"李四","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":55}',
+  '{"student_no":"2025002","student_name":"李四","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":48}',
+  '{"student_no":"2025003","student_name":"王五","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":92}',
+  '{"student_no":"2025003","student_name":"王五","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":88}'];
+  document.getElementById('gradesInput').value=demos.join('\n');
+}
+
+async function analyzeTrend(){await analyze('/api/analytics/trend','trend-result','趋势分析结果')}
+async function checkRisk(){await analyze('/api/analytics/risk','risk-result','风险预警结果')}
+async function analyzeMastery(){await analyze('/api/analytics/mastery','mastery-result','知识点掌握度')}
+async function generateReport(){
+  const r=await analyze('/api/analytics/full-report','mastery-result','',{class_name:document.getElementById('className').value||'全班'});
+}
+
+async function analyze(url,elId,title,extra={}){
+  if(!storedGrades.length){alert('请先导入成绩数据');return}
+  document.getElementById('loading').classList.add('show');
+  const el=document.getElementById(elId);el.classList.remove('show');
+  try{
+    const body={grades:storedGrades,...extra};
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){
+      const data=d.data||d;
+      let html=`<h3>${title}</h3>`;
+      if(data.report){html=data.report}
+      else if(data.ai_analysis){html=data.ai_analysis}
+      else{html=JSON.stringify(data,null,2)}
+      el.innerHTML=html;el.classList.add('show');
+    }else alert(d.error||'分析失败');
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+</script>
+</body>
+</html>

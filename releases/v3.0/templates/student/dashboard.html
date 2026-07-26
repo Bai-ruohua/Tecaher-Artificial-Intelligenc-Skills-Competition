@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学习中心 · {{ config.PLATFORM_NAME }} V{{ config.PLATFORM_VERSION }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/func.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body class="student">
+<nav class="navbar">
+  <a href="/student/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 学生学习中心</a>
+  <div class="navbar-nav">
+    <a href="/student/dashboard" class="nav-link">首页</a>
+    <a href="/student/qa" class="nav-link">答疑</a>
+    <a href="/student/quiz" class="nav-link">刷题</a>
+    <a href="/student/digital" class="nav-link">数字人</a>
+    <a href="/student/graph" class="nav-link">图谱</a>
+    <span style="font-size:13px;color:var(--text-secondary);margin:0 8px">{{ student.student_name }}</span>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+
+<div class="container">
+  <!-- 课程上下文选择条 -->
+  <div class="course-bar">
+    <span class="course-label">我的课程</span>
+    <select id="courseSelect" onchange="switchCourse(this.value)">
+      {% for c in courses %}
+      <option value="{{ c.id }}" {% if c.id == course_id %}selected{% endif %}>{{ c.course_name }}{% if c.semester %} ({{ c.semester }}){% endif %}</option>
+      {% endfor %}
+    </select>
+    <span class="course-name" id="courseName">{% if course %}{{ course.course_name }}{% else %}未选课{% endif %}</span>
+  </div>
+
+  <p style="color:var(--text-secondary);margin-bottom:8px">欢迎回来，{{ student.student_name }}！</p>
+
+  <!-- 个人关键指标 -->
+  <div class="metric-row">
+    <div class="metric-card rank-card">
+      <div class="metric-label">我的排名</div>
+      <div class="rank-num" id="m-rank">-</div>
+      <div class="rank-total" id="m-rank-total"></div>
+    </div>
+    <div class="metric-card"><div class="metric-label">答题总数</div><div class="metric-value" id="m-attempts">-</div></div>
+    <div class="metric-card"><div class="metric-label">正确率</div><div class="metric-value" id="m-accuracy">-</div></div>
+    <div class="metric-card"><div class="metric-label">错题数</div><div class="metric-value" id="m-wrong">-</div></div>
+  </div>
+
+  <!-- 功能区 -->
+  <div class="section-title"><span class="bar"></span>功能中心</div>
+  <div class="func-grid">
+    <a class="func-card" href="#coursesInfo">
+      <div class="fc-icon">📚</div><div class="fc-title">我的课程</div>
+      <div class="fc-desc">查看已选课程，切换学习上下文</div>
+    </a>
+    <a class="func-card" href="/student/qa">
+      <div class="fc-icon">💬</div><div class="fc-title">AI 智能答疑</div>
+      <div class="fc-desc">基于课程知识库的 RAG 问答，附来源</div>
+    </a>
+    <a class="func-card" href="/student/quiz">
+      <div class="fc-icon">🎯</div><div class="fc-title">智能刷题判分</div>
+      <div class="fc-desc">按章节随机出题、即时判分、错题本</div>
+    </a>
+    <a class="func-card" href="/student/digital">
+      <div class="fc-icon">🎙️</div><div class="fc-title">数字人讲解</div>
+      <div class="fc-desc">克隆教师声音讲解知识点</div>
+    </a>
+    <a class="func-card" href="/student/graph">
+      <div class="fc-icon">🕸️</div><div class="fc-title">知识图谱</div>
+      <div class="fc-desc">可视化知识网络与学习路径</div>
+    </a>
+    <a class="func-card" href="#myLearning">
+      <div class="fc-icon">📊</div><div class="fc-title">我的学情</div>
+      <div class="fc-desc">能力雷达 / 排名 / 掌握甘特</div>
+    </a>
+  </div>
+
+  <!-- 已选课程列表 -->
+  <div class="section-title"><span class="bar"></span>已选课程</div>
+  <div id="coursesInfo" class="func-grid">
+    {% for c in courses %}
+    <div class="func-card" style="cursor:default">
+      <div class="fc-icon">📖</div><div class="fc-title">{{ c.course_name }}</div>
+      <div class="fc-desc">{{ c.semester or '' }} · 教师：{{ c.teacher_name }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- 我的学情 -->
+  <div class="section-title"><span class="bar"></span>我的学情</div>
+  <div id="myLearning" class="dashboard-grid">
+    <div class="chart-card">
+      <div class="chart-title">我的能力雷达图</div>
+      <div class="chart-wrap"><canvas id="radarChart" role="img" aria-label="个人能力雷达图"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">知识掌握甘特图</div>
+      <div id="ganttChart" style="height:300px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function switchCourse(cid){
+  if(!cid)return;
+  await fetch('/api/course/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+async function loadDashboard(){
+  try{
+    const json=await (await fetch('/api/student/dashboard')).json();
+    if(!json.success)return;
+    const d=json.data;
+    document.getElementById('m-attempts').textContent=d.stats.total_attempts||0;
+    document.getElementById('m-accuracy').textContent=(d.stats.accuracy||0)+'%';
+    document.getElementById('m-wrong').textContent=d.wrong_count||0;
+    document.getElementById('m-rank').textContent=d.rank_info.rank||'-';
+    document.getElementById('m-rank-total').textContent='共 '+(d.rank_info.total_students||d.rank_info.total||'?')+' 人';
+    renderRadar(d.radar||[]);
+    renderGantt(d.gantt||[]);
+  }catch(e){console.error(e);}
+}
+function renderRadar(radar){
+  const ctx=document.getElementById('radarChart');
+  if(window._radarChart)window._radarChart.destroy();
+  window._radarChart=new Chart(ctx,{type:'radar',data:{labels:radar.map(r=>r.label),datasets:[{label:'我的能力',data:radar.map(r=>r.score),backgroundColor:'rgba(29,158,117,0.15)',borderColor:'rgba(29,158,117,0.8)',borderWidth:2,pointBackgroundColor:'rgba(29,158,117,1)',pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:100,ticks:{stepSize:20,font:{size:11}},pointLabels:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+}
+function renderGantt(gantt){
+  const c=document.getElementById('ganttChart');
+  if(!gantt||gantt.length===0){c.innerHTML='<div style="text-align:center;color:var(--text-tertiary);padding:40px">暂无数据，开始刷题后自动生成</div>';return;}
+  const lc={mastered:'gantt-mastered',in_progress:'gantt-progress',weak:'gantt-weak',very_weak:'gantt-vweak',not_started:'gantt-none'};
+  const ll={mastered:'已掌握',in_progress:'进行中',weak:'薄弱',very_weak:'很弱',not_started:'未开始'};
+  let h='<table><thead><tr><th>章节</th><th>掌握度</th><th>状态</th><th>答题</th></tr></thead><tbody>';
+  for(const g of gantt){
+    h+=`<tr><td style="font-size:12px">${g.chapter_title}</td><td><div class="gantt-bar ${lc[g.mastery_level]||'gantt-none'}" style="width:${g.mastery_percent}%"></div> ${g.mastery_percent}%</td><td style="font-size:12px">${ll[g.mastery_level]||'-'}</td><td style="font-size:12px">${g.attempt_count}题 对${g.correct_count}</td></tr>`;
+  }
+  c.innerHTML=h+'</tbody></table>';
+}
+loadDashboard();
+</script>
+</body>
+</html>

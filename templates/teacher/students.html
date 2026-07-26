@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生管理 - {{ config.COURSE_NAME }}AI智能教学平台</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.section-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.section-title { font-size: 15px; font-weight: 500; margin-bottom: 16px; }
+.form-row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+.form-row .form-group { flex: 1; min-width: 150px; }
+.form-group { margin-bottom: 12px; }
+.form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.form-input, .form-select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); }
+textarea.form-input { height: 120px; font-family: monospace; resize: vertical; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { font-weight: 500; color: var(--text-secondary); background: var(--bg-secondary); }
+.result-box { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px; }
+.result-success { background: rgba(29, 158, 117, 0.1); color: #085041; }
+.result-fail { background: rgba(226, 75, 74, 0.1); color: #791F1F; }
+</style>
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="container">
+  <h2 style="margin-bottom:16px;font-size:20px">学生账号管理</h2>
+
+  <!-- 批量生成 -->
+  <div class="section-card">
+    <div class="section-title">自动批量生成学生账号</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">选择课程</label>
+        <select class="form-select" id="genCourse">
+          {% for c in courses %}
+          <option value="{{ c.id }}">{{ c.course_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">学号前缀</label>
+        <input class="form-input" id="genPrefix" value="2024" placeholder="如 2024">
+      </div>
+      <div class="form-group">
+        <label class="form-label">生成数量</label>
+        <input class="form-input" id="genCount" type="number" value="10" min="1" max="200">
+      </div>
+      <div class="form-group">
+        <label class="form-label">班级名称</label>
+        <input class="form-input" id="genClass" placeholder="如 计科2401">
+      </div>
+      <div class="form-group">
+        <label class="form-label">初始密码</label>
+        <input class="form-input" id="genPwd" value="123456">
+      </div>
+      <div class="form-group" style="flex:0">
+        <button class="btn btn-primary" onclick="batchGenerate()">生成账号</button>
+      </div>
+    </div>
+    <div id="genResult"></div>
+  </div>
+
+  <!-- 手动导入 -->
+  <div class="section-card">
+    <div class="section-title">手动批量导入（每行：学号,姓名,班级）</div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label class="form-label">选择课程</label>
+        <select class="form-select" id="importCourse">
+          {% for c in courses %}
+          <option value="{{ c.id }}">{{ c.course_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">初始密码</label>
+        <input class="form-input" id="importPwd" value="123456">
+      </div>
+    </div>
+    <textarea class="form-input" id="importText" placeholder="2024001,张三,计科2401&#10;2024002,李四,计科2401&#10;2024003,王五,计科2402"></textarea>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="batchImport()">导入</button>
+    </div>
+    <div id="importResult"></div>
+  </div>
+
+  <!-- 学生列表 -->
+  <div class="section-card">
+    <div class="section-title">
+      学生列表
+      <select id="listCourse" onchange="loadStudents()" style="float:right;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <option value="">全部课程</option>
+        {% for c in courses %}
+        <option value="{{ c.id }}">{{ c.course_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <table>
+      <thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>课程</th><th>注册时间</th></tr></thead>
+      <tbody id="studentList"><tr><td colspan="5" style="text-align:center;color:var(--text-tertiary)">加载中...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function batchGenerate() {
+  const courseId = document.getElementById('genCourse').value;
+  const prefix = document.getElementById('genPrefix').value.trim();
+  const count = parseInt(document.getElementById('genCount').value);
+  const className = document.getElementById('genClass').value.trim();
+  const pwd = document.getElementById('genPwd').value;
+
+  if (!prefix || !count) { alert('请填写前缀和数量'); return; }
+
+  const resp = await fetch('/api/teacher/students/batch-generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ course_id: parseInt(courseId), prefix, count, class_name: className, default_password: pwd }),
+  });
+  const data = await resp.json();
+  showResult('genResult', data);
+  loadStudents();
+}
+
+async function batchImport() {
+  const courseId = document.getElementById('importCourse').value;
+  const text = document.getElementById('importText').value.trim();
+  const pwd = document.getElementById('importPwd').value;
+
+  if (!text) { alert('请输入学生数据'); return; }
+
+  const lines = text.split('\n').filter(l => l.trim());
+  const students = lines.map(l => {
+    const parts = l.split(',').map(p => p.trim());
+    return { student_no: parts[0], student_name: parts[1] || '', class_name: parts[2] || '' };
+  }).filter(s => s.student_no && s.student_name);
+
+  if (students.length === 0) { alert('未解析到有效数据，格式：学号,姓名,班级'); return; }
+
+  const resp = await fetch('/api/teacher/students/batch-create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ course_id: parseInt(courseId), students, default_password: pwd }),
+  });
+  const data = await resp.json();
+  showResult('importResult', data);
+  loadStudents();
+}
+
+function showResult(elId, data) {
+  const el = document.getElementById(elId);
+  if (data.success) {
+    const d = data.data;
+    let html = `<div class="result-box result-success">成功 ${d.success.length} 个，失败 ${d.failed.length} 个</div>`;
+    if (d.failed.length > 0) {
+      html += '<div class="result-box result-fail">失败列表：<br>';
+      d.failed.forEach(f => html += `${f.student_no}: ${f.reason}<br>`);
+      html += '</div>';
+    }
+    if (d.success.length > 0) {
+      html += '<div class="result-box result-success">创建成功：<br>';
+      d.success.slice(0, 10).forEach(s => html += `${s.student_no} ${s.student_name}<br>`);
+      if (d.success.length > 10) html += `...共 ${d.success.length} 个`;
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = `<div class="result-box result-fail">${data.error || '操作失败'}</div>`;
+  }
+}
+
+async function loadStudents() {
+  const courseId = document.getElementById('listCourse').value;
+  const url = '/api/teacher/students/list' + (courseId ? '?course_id=' + courseId : '');
+  const resp = await fetch(url);
+  const data = await resp.json();
+  const tbody = document.getElementById('studentList');
+
+  if (data.success && data.students.length > 0) {
+    tbody.innerHTML = data.students.map(s => `<tr>
+      <td>${s.student_no}</td><td>${s.student_name}</td><td>${s.class_name || '-'}</td>
+      <td>${s.course_name || '-'}</td><td>${(s.enrolled_at || s.created_at || '').slice(0, 10)}</td>
+    </tr>`).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary)">暂无学生</td></tr>';
+  }
+}
+
+loadStudents();
+</script>
+</body>
+</html>

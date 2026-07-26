@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI学情分析 · {{ config.PLATFORM_NAME }} V{{ config.PLATFORM_VERSION }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/func.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+/* ===== Analytics 专用样式 ===== */
+:root {
+  --c-indigo: #4F46E5;
+  --c-indigo-light: #818CF8;
+  --c-emerald: #059669;
+  --c-amber: #D97706;
+  --c-rose: #E11D48;
+  --c-sky: #0284C7;
+  --c-violet: #7C3AED;
+}
+
+.analytics-page { max-width: 1280px; margin: 0 auto; padding: 20px 24px 48px; }
+
+/* KPI 卡片行 */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  border-radius: 14px 14px 0 0;
+}
+.kpi-card.k1::before { background: linear-gradient(90deg, #4F46E5, #818CF8); }
+.kpi-card.k2::before { background: linear-gradient(90deg, #059669, #34D399); }
+.kpi-card.k3::before { background: linear-gradient(90deg, #D97706, #FBBF24); }
+.kpi-card.k4::before { background: linear-gradient(90deg, #7C3AED, #A78BFA); }
+.kpi-icon { font-size: 28px; margin-bottom: 6px; }
+.kpi-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+.kpi-value { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+.kpi-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+
+/* 图表网格 */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.chart-grid.full { grid-template-columns: 1fr; }
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+.chart-card .chart-title {
+  font-size: 15px; font-weight: 600; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.chart-card .chart-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-indigo); }
+.chart-box { width: 100%; height: 320px; }
+.chart-box.tall { height: 380px; }
+.chart-box.short { height: 260px; }
+
+/* 空状态 */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-tertiary); gap: 8px;
+}
+.empty-state .emoji { font-size: 40px; }
+.empty-state .text { font-size: 14px; }
+
+/* 排名表 */
+.rank-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.rank-table th {
+  text-align: left; padding: 10px 12px; background: var(--bg-secondary);
+  color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.rank-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.rank-table tr:hover { background: var(--bg-secondary); }
+.rank-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font-size: 12px; font-weight: 700;
+}
+.rank-badge.r1 { background: #FEF3C7; color: #92400E; }
+.rank-badge.r2 { background: #E2E8F0; color: #475569; }
+.rank-badge.r3 { background: #FED7AA; color: #9A3412; }
+.rank-badge.rn { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+/* 进度条 */
+.bar-wrap { display: flex; align-items: center; gap: 8px; }
+.bar-track {
+  flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%; border-radius: 4px;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.bar-fill.good { background: linear-gradient(90deg, #059669, #34D399); }
+.bar-fill.mid { background: linear-gradient(90deg, #D97706, #FBBF24); }
+.bar-fill.low { background: linear-gradient(90deg, #E11D48, #FB7185); }
+.bar-val { font-size: 12px; font-weight: 600; min-width: 36px; text-align: right; }
+
+/* AI 分析面板 */
+.ai-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.ai-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex; flex-direction: column;
+}
+.ai-card .ai-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+}
+.ai-card .ai-head .ico { font-size: 20px; }
+.ai-card .ai-head .ttl { font-size: 15px; font-weight: 600; }
+.ai-card .ai-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; transition: all .2s;
+  background: var(--c-indigo); color: #fff; margin-bottom: 12px;
+}
+.ai-card .ai-btn:hover { opacity: .85; }
+.ai-card .ai-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ai-card .ai-body {
+  flex: 1; font-size: 13px; line-height: 1.8; color: var(--text);
+  white-space: pre-wrap; overflow-y: auto; max-height: 320px;
+  display: none;
+}
+.ai-card .ai-body.show { display: block; }
+.ai-card .ai-body h1,.ai-card .ai-body h2,.ai-card .ai-body h3 {
+  color: var(--c-indigo); margin: 10px 0 6px; font-size: 14px;
+}
+
+/* 统计小标签 */
+.stat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.stat-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+}
+.stat-pill.blue { background: #EEF2FF; color: #4338CA; }
+.stat-pill.green { background: #ECFDF5; color: #047857; }
+.stat-pill.amber { background: #FFFBEB; color: #B45309; }
+.stat-pill.red { background: #FEF2F2; color: #B91C1C; }
+.stat-pill.gray { background: #F1F5F9; color: #64748B; }
+
+/* 风险标签 */
+.risk-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.risk-high { background: #FEE2E2; color: #991B1B; }
+.risk-mid { background: #FEF3C7; color: #92400E; }
+.risk-low { background: #DCFCE7; color: #166534; }
+
+/* 报告区 */
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.report-body {
+  font-size: 14px; line-height: 1.9; white-space: pre-wrap;
+  max-height: 600px; overflow-y: auto; display: none;
+}
+.report-body.show { display: block; }
+.report-body h1,.report-body h2,.report-body h3 {
+  color: var(--c-indigo); margin: 14px 0 8px;
+}
+
+/* 折叠区 */
+.collapse-toggle {
+  cursor: pointer; font-size: 13px; color: var(--c-indigo);
+  user-select: none; display: inline-flex; align-items: center; gap: 4px;
+}
+.collapse-toggle:hover { text-decoration: underline; }
+.collapse-content { display: none; margin-top: 12px; }
+.collapse-content.show { display: block; }
+
+/* loading */
+.ai-loading {
+  display: none; text-align: center; padding: 20px;
+  color: var(--text-secondary); font-size: 13px;
+}
+.ai-loading.show { display: block; }
+.dots::after {
+  content: ''; animation: dots 1.4s infinite;
+}
+@keyframes dots {
+  0%,20% { content: '.'; } 40% { content: '..'; } 60%,100% { content: '...'; }
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .ai-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="analytics-page">
+{% include 'teacher/_course_bar.html' %}
+
+  <h2 style="margin-bottom:20px;display:flex;align-items:center;gap:8px">
+    <span style="width:4px;height:22px;background:var(--c-indigo);border-radius:2px"></span>
+    AI 学情分析看板
+  </h2>
+
+  <!-- 1. KPI 概览 -->
+  <div class="kpi-row">
+    <div class="kpi-card k1">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-label">学生总数</div>
+      <div class="kpi-value" id="kpi-total">-</div>
+      <div class="kpi-sub" id="kpi-total-sub"> enrolled</div>
+    </div>
+    <div class="kpi-card k2">
+      <div class="kpi-icon">✅</div>
+      <div class="kpi-label">活跃学生</div>
+      <div class="kpi-value" id="kpi-active">-</div>
+      <div class="kpi-sub" id="kpi-active-sub">有答题记录</div>
+    </div>
+    <div class="kpi-card k3">
+      <div class="kpi-icon">🎯</div>
+      <div class="kpi-label">平均正确率</div>
+      <div class="kpi-value" id="kpi-accuracy">-</div>
+      <div class="kpi-sub">全班答题正确率</div>
+    </div>
+    <div class="kpi-card k4">
+      <div class="kpi-icon">📊</div>
+      <div class="kpi-label">平均综合分</div>
+      <div class="kpi-value" id="kpi-composite">-</div>
+      <div class="kpi-sub">综合评估指标</div>
+    </div>
+  </div>
+
+  <!-- 2. 雷达图 + 章节掌握度柱状图 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot"></span>班级能力雷达图</div>
+      <div class="chart-box" id="radarChart"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--c-emerald)"></span>章节掌握度</div>
+      <div class="chart-box" id="masteryChart"></div>
+    </div>
+  </div>
+
+  <!-- 3. 成绩分布 + 活跃度 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--c-amber)"></span>综合分分布</div>
+      <div class="chart-box short" id="distChart"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--c-violet)"></span>学习活跃度（答题量 vs 学习时长）</div>
+      <div class="chart-box short" id="activityChart"></div>
+    </div>
+  </div>
+
+  <!-- 4. 排名表 -->
+  <div class="chart-card" style="margin-bottom:24px">
+    <div class="chart-title"><span class="dot" style="background:var(--c-sky)"></span>学生综合排名</div>
+    <div style="overflow-x:auto">
+      <table class="rank-table" id="rankTable">
+        <thead>
+          <tr>
+            <th>排名</th>
+            <th>学号</th>
+            <th>姓名</th>
+            <th>班级</th>
+            <th style="width:160px">综合分</th>
+            <th style="width:120px">正确率</th>
+            <th>答题数</th>
+            <th>学习时长</th>
+            <th>错题数</th>
+          </tr>
+        </thead>
+        <tbody id="rankBody">
+          <tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:32px">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 5. AI 智能分析 -->
+  <div class="section-title"><span class="bar"></span>AI 智能分析</div>
+  <div class="ai-grid">
+    <!-- 趋势分析 -->
+    <div class="ai-card">
+      <div class="ai-head"><span class="ico">📈</span><span class="ttl">班级趋势分析</span></div>
+      <button class="ai-btn" onclick="runAI('trend')">分析趋势</button>
+      <div class="ai-loading" id="load-trend"><span class="spinner" style="width:16px;height:16px;border-width:2px;vertical-align:middle"></span> AI 分析中<span class="dots"></span></div>
+      <div class="ai-body" id="body-trend"></div>
+    </div>
+    <!-- 风险预警 -->
+    <div class="ai-card">
+      <div class="ai-head"><span class="ico">⚠️</span><span class="ttl">风险学生预警</span></div>
+      <button class="ai-btn" onclick="runAI('risk')" style="background:var(--c-rose)">检测预警</button>
+      <div class="ai-loading" id="load-risk"><span class="spinner" style="width:16px;height:16px;border-width:2px;vertical-align:middle"></span> AI 分析中<span class="dots"></span></div>
+      <div class="ai-body" id="body-risk"></div>
+    </div>
+    <!-- 知识点掌握 -->
+    <div class="ai-card">
+      <div class="ai-head"><span class="ico">🧠</span><span class="ttl">知识点掌握度</span></div>
+      <button class="ai-btn" onclick="runAI('mastery')" style="background:var(--c-emerald)">分析掌握度</button>
+      <div class="ai-loading" id="load-mastery"><span class="spinner" style="width:16px;height:16px;border-width:2px;vertical-align:middle"></span> AI 分析中<span class="dots"></span></div>
+      <div class="ai-body" id="body-mastery"></div>
+    </div>
+  </div>
+
+  <!-- 6. 完整报告 -->
+  <div class="report-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="chart-title" style="margin-bottom:0"><span class="dot" style="background:var(--c-violet)"></span>AI 完整学情报告</div>
+      <div style="display:flex;gap:8px">
+        <button class="ai-btn" onclick="runAI('report')" style="background:var(--c-violet);padding:8px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;color:#fff">生成完整报告</button>
+      </div>
+    </div>
+    <div class="ai-loading" id="load-report"><span class="spinner" style="width:16px;height:16px;border-width:2px;vertical-align:middle"></span> AI 生成报告中<span class="dots"></span>这可能需要 30 秒</div>
+    <div class="report-body" id="body-report"></div>
+  </div>
+
+  <!-- 7. 成绩导入（折叠） -->
+  <div class="chart-card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="chart-title" style="margin-bottom:0"><span class="dot" style="background:var(--text-tertiary)"></span>成绩数据导入</div>
+      <span class="collapse-toggle" onclick="toggleImport()">[ 展开 ]</span>
+    </div>
+    <div class="collapse-content" id="importArea">
+      <div class="form-group" style="margin-top:12px">
+        <label>班级名称</label>
+        <input type="text" id="className" placeholder="如：2025级计应1班" style="max-width:300px">
+      </div>
+      <div class="form-group">
+        <label>成绩数据（每行一个学生 JSON）</label>
+        <textarea id="gradesInput" rows="5" placeholder='每行格式：&#10;{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch04","score":85}'></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="importGrades()">导入数据</button>
+        <button class="btn btn-outline btn-sm" onclick="loadDemo()">加载示例数据</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+let echarts_instances = {};
+
+/* ===== 课程切换 ===== */
+async function switchCourse(cid) {
+  if (!cid) return;
+  await fetch('/api/course/select', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+
+/* ===== 数据加载 ===== */
+async function loadAll() {
+  const cidParam = CURRENT_COURSE ? '?course_id=' + CURRENT_COURSE : '';
+  try {
+    const [dashRes, radarRes, ganttRes, rankRes] = await Promise.all([
+      fetch('/api/teacher/dashboard' + cidParam).then(r => r.json()),
+      fetch('/api/teacher/radar' + cidParam).then(r => r.json()),
+      fetch('/api/teacher/gantt' + cidParam).then(r => r.json()),
+      fetch('/api/teacher/rankings' + cidParam).then(r => r.json()),
+    ]);
+
+    if (dashRes.success) renderKPIs(dashRes.data.summary);
+    if (radarRes.success) renderRadar(radarRes.radar || []);
+    if (ganttRes.success) renderMastery(ganttRes.gantt || []);
+    if (rankRes.success) renderRankings(rankRes.rankings || []);
+  } catch (e) {
+    console.error('load error', e);
+  }
+}
+
+/* ===== KPI ===== */
+function renderKPIs(s) {
+  document.getElementById('kpi-total').textContent = s.total_students ?? '-';
+  document.getElementById('kpi-total-sub').textContent = ' enrolled';
+  document.getElementById('kpi-active').textContent = s.active_students ?? '-';
+  document.getElementById('kpi-active-sub').textContent = s.active_students > 0 ? Math.round(s.active_students / Math.max(s.total_students,1) * 100) + '% 活跃率' : '有答题记录';
+  document.getElementById('kpi-accuracy').textContent = (s.avg_accuracy ?? 0) + '%';
+  document.getElementById('kpi-composite').textContent = s.avg_composite ?? '-';
+}
+
+/* ===== 雷达图 ===== */
+function renderRadar(radar) {
+  const el = document.getElementById('radarChart');
+  if (!radar || radar.length === 0) {
+    el.innerHTML = emptyState('📊', '暂无答题数据');
+    return;
+  }
+  let chart = echarts_instances.radar;
+  if (!chart) { chart = echarts.init(el); echarts_instances.radar = chart; }
+
+  const indicators = radar.map(r => ({ name: r.label || r.dimension, max: 100 }));
+  const values = radar.map(r => r.score || 0);
+
+  chart.setOption({
+    tooltip: { trigger: 'item' },
+    radar: {
+      indicator: indicators,
+      shape: 'polygon',
+      splitNumber: 5,
+      axisName: { color: '#64748B', fontSize: 12 },
+      splitLine: { lineStyle: { color: '#E2E8F0' } },
+      splitArea: { areaStyle: { color: ['#F8FAFC','#F1F5F9','#F8FAFC','#F1F5F9','#F8FAFC'] } },
+      axisLine: { lineStyle: { color: '#E2E8F0' } },
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: values,
+        name: '班级平均',
+        areaStyle: { color: 'rgba(79,70,229,0.15)' },
+        lineStyle: { color: '#4F46E5', width: 2 },
+        itemStyle: { color: '#4F46E5' },
+        symbolSize: 6,
+      }],
+    }],
+  });
+}
+
+/* ===== 章节掌握度柱状图 ===== */
+function renderMastery(gantt) {
+  const el = document.getElementById('masteryChart');
+  if (!gantt || gantt.length === 0) {
+    el.innerHTML = emptyState('📚', '暂无章节数据');
+    return;
+  }
+  let chart = echarts_instances.mastery;
+  if (!chart) { chart = echarts.init(el); echarts_instances.mastery = chart; }
+
+  const chapters = gantt.map(g => g.chapter_title || g.chapter_id);
+  const percents = gantt.map(g => g.mastery_percent || 0);
+  const colors = percents.map(p => {
+    if (p >= 80) return '#059669';
+    if (p >= 60) return '#D97706';
+    if (p >= 40) return '#F59E0B';
+    if (p > 0) return '#E11D48';
+    return '#CBD5E1';
+  });
+
+  chart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: function(params) {
+        const idx = params[0].dataIndex;
+        const g = gantt[idx];
+        let html = `<b>${g.chapter_title}</b><br/>`;
+        html += `掌握度: ${g.mastery_percent}%<br/>`;
+        html += `总答题: ${g.total_attempts || 0} 次<br/>`;
+        html += `参与学生: ${g.student_count || 0} 人`;
+        return html;
+      }
+    },
+    grid: { left: '3%', right: '6%', bottom: '3%', top: '8%', containLabel: true },
+    xAxis: {
+      type: 'value', max: 100,
+      axisLabel: { formatter: '{value}%', color: '#64748B', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#F1F5F9' } },
+    },
+    yAxis: {
+      type: 'category',
+      data: chapters,
+      axisLabel: { color: '#64748B', fontSize: 11, width: 80, overflow: 'truncate' },
+      axisLine: { lineStyle: { color: '#E2E8F0' } },
+    },
+    series: [{
+      type: 'bar',
+      data: percents.map((v, i) => ({ value: v, itemStyle: { color: colors[i], borderRadius: [0, 4, 4, 0] } })),
+      barWidth: '60%',
+      label: {
+        show: true,
+        position: 'right',
+        formatter: '{c}%',
+        fontSize: 11,
+        color: '#64748B',
+      },
+    }],
+  });
+}
+
+/* ===== 成绩分布饼图 ===== */
+function renderDist(rankings) {
+  const el = document.getElementById('distChart');
+  if (!rankings || rankings.length === 0) {
+    el.innerHTML = emptyState('🍰', '暂无数据');
+    return;
+  }
+  let chart = echarts_instances.dist;
+  if (!chart) { chart = echarts.init(el); echarts_instances.dist = chart; }
+
+  const ranges = [
+    { name: '优秀 (≥85)', min: 85, max: 200, color: '#059669' },
+    { name: '良好 (70-84)', min: 70, max: 85, color: '#0284C7' },
+    { name: '及格 (60-69)', min: 60, max: 70, color: '#D97706' },
+    { name: '不及格 (<60)', min: 0, max: 60, color: '#E11D48' },
+  ];
+  const data = ranges.map(r => ({
+    name: r.name,
+    value: rankings.filter(s => s.composite_score >= r.min && s.composite_score < r.max).length,
+    itemStyle: { color: r.color },
+  }));
+
+  chart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} 人 ({d}%)' },
+    legend: { bottom: 0, left: 'center', textStyle: { fontSize: 11, color: '#64748B' } },
+    series: [{
+      type: 'pie',
+      radius: ['42%', '68%'],
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{c}人', fontSize: 11 },
+      data: data,
+    }],
+  });
+}
+
+/* ===== 活跃度散点图 ===== */
+function renderActivity(rankings) {
+  const el = document.getElementById('activityChart');
+  if (!rankings || rankings.length === 0) {
+    el.innerHTML = emptyState('⚡', '暂无数据');
+    return;
+  }
+  let chart = echarts_instances.activity;
+  if (!chart) { chart = echarts.init(el); echarts_instances.activity = chart; }
+
+  const data = rankings.map(r => ({
+    value: [r.total_attempts || 0, r.study_minutes || 0],
+    name: r.student_name || r.student_no,
+  }));
+
+  chart.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter: function(p) {
+        return `${p.data.name}<br/>答题: ${p.value[0]} 次<br/>学习: ${p.value[1]} 分钟`;
+      }
+    },
+    grid: { left: '3%', right: '5%', bottom: '8%', top: '8%', containLabel: true },
+    xAxis: {
+      type: 'value', name: '答题数', nameTextStyle: { color: '#64748B', fontSize: 11 },
+      axisLabel: { color: '#64748B', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#F1F5F9' } },
+    },
+    yAxis: {
+      type: 'value', name: '学习时长(分)', nameTextStyle: { color: '#64748B', fontSize: 11 },
+      axisLabel: { color: '#64748B', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#F1F5F9' } },
+    },
+    series: [{
+      type: 'scatter',
+      data: data,
+      symbolSize: function(d) { return Math.max(8, Math.min(28, d[0] * 0.8)); },
+      itemStyle: { color: 'rgba(124,58,237,0.6)', borderColor: '#7C3AED', borderWidth: 1 },
+      emphasis: { itemStyle: { color: '#7C3AED', shadowBlur: 10, shadowColor: 'rgba(124,58,237,0.3)' } },
+    }],
+  });
+}
+
+/* ===== 排名表 ===== */
+function renderRankings(rankings) {
+  renderDist(rankings);
+  renderActivity(rankings);
+
+  const tbody = document.getElementById('rankBody');
+  if (!rankings || rankings.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:32px">暂无学生数据，请先导入成绩或让学生开始答题</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rankings.map((r, i) => {
+    const rank = i + 1;
+    const badgeClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : 'rn';
+    const compClass = r.composite_score >= 70 ? 'good' : r.composite_score >= 50 ? 'mid' : 'low';
+    const accClass = r.accuracy >= 70 ? 'good' : r.accuracy >= 50 ? 'mid' : 'low';
+    return `<tr>
+      <td><span class="rank-badge ${badgeClass}">${rank}</span></td>
+      <td style="color:var(--text-secondary)">${r.student_no || '-'}</td>
+      <td style="font-weight:600">${r.student_name || '-'}</td>
+      <td style="color:var(--text-secondary)">${r.class_name || '-'}</td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill ${compClass}" style="width:${Math.min(r.composite_score,100)}%"></div></div>
+          <span class="bar-val">${r.composite_score}</span>
+        </div>
+      </td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill ${accClass}" style="width:${Math.min(r.accuracy,100)}%"></div></div>
+          <span class="bar-val">${r.accuracy}%</span>
+        </div>
+      </td>
+      <td style="text-align:center">${r.total_attempts || 0}</td>
+      <td style="text-align:center;color:var(--text-secondary)">${r.study_minutes ? r.study_minutes + 'min' : '-'}</td>
+      <td style="text-align:center">${r.wrong_count > 0 ? `<span style="color:var(--c-rose);font-weight:600">${r.wrong_count}</span>` : '0'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ===== AI 分析 ===== */
+async function runAI(type) {
+  const loadId = 'load-' + type;
+  const bodyId = 'body-' + type;
+  document.getElementById(loadId).classList.add('show');
+  document.getElementById(bodyId).classList.remove('show');
+
+  const urlMap = {
+    trend: '/api/analytics/trend',
+    risk: '/api/analytics/risk',
+    mastery: '/api/analytics/mastery',
+    report: '/api/analytics/full-report',
+  };
+  const bodyId2 = type === 'report' ? 'body-report' : bodyId;
+  const loadId2 = type === 'report' ? 'load-report' : loadId;
+
+  try {
+    const resp = await fetch(urlMap[type], {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ use_db: true, class_name: document.getElementById('className')?.value || '' }),
+    });
+    const d = await resp.json();
+    document.getElementById(loadId2).classList.remove('show');
+
+    if (!d.success) {
+      document.getElementById(bodyId2).innerHTML = '<span style="color:var(--c-rose)">分析失败: ' + (d.error || '未知错误') + '</span>';
+      document.getElementById(bodyId2).classList.add('show');
+      return;
+    }
+
+    const data = d.data || d;
+    let html = '';
+
+    if (type === 'trend') {
+      const stats = [
+        { label: '人数', val: data.count, cls: 'blue' },
+        { label: '平均分', val: data.avg_score, cls: 'green' },
+        { label: '及格率', val: (data.pass_rate || 0) + '%', cls: data.pass_rate >= 60 ? 'green' : 'amber' },
+        { label: '优秀率', val: (data.excellent_rate || 0) + '%', cls: 'amber' },
+        { label: '最高分', val: data.max_score, cls: 'green' },
+        { label: '最低分', val: data.min_score, cls: 'red' },
+      ];
+      html += '<div class="stat-row">' + stats.map(s => `<span class="stat-pill ${s.cls}">${s.label}: ${s.val}</span>`).join('') + '</div>';
+      if (data.ai_analysis) html += '<div style="margin-top:8px">' + formatText(data.ai_analysis) + '</div>';
+      else if (data.error) html += '<div style="color:var(--text-tertiary)">' + data.error + '</div>';
+    } else if (type === 'risk') {
+      if (data.risk_students && data.risk_students.length > 0) {
+        html += '<div style="margin-bottom:10px">';
+        data.risk_students.forEach(s => {
+          const cls = s.risk_level.includes('高') ? 'risk-high' : s.risk_level.includes('中') ? 'risk-mid' : 'risk-low';
+          html += `<div style="margin-bottom:6px"><span class="risk-badge ${cls}">${s.risk_level}</span> <b>${s.student}</b> — 均分 ${s.avg_score} (${s.exam_count}次考试)</div>`;
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="stat-row"><span class="stat-pill green">未检测到风险学生</span></div>';
+      }
+      if (data.ai_analysis) html += '<div style="margin-top:8px">' + formatText(data.ai_analysis) + '</div>';
+    } else if (type === 'mastery') {
+      if (data.mastery && data.mastery.length > 0) {
+        html += '<div style="margin-bottom:10px">';
+        data.mastery.forEach(m => {
+          const cls = m.avg_score >= 80 ? 'good' : m.avg_score >= 60 ? 'mid' : 'low';
+          html += `<div style="margin-bottom:4px"><div style="font-size:12px;color:var(--text-secondary);margin-bottom:2px">${m.chapter_id}</div>`;
+          html += `<div class="bar-wrap"><div class="bar-track"><div class="bar-fill ${cls}" style="width:${m.avg_score}%"></div></div><span class="bar-val">${m.avg_score}</span></div></div>`;
+        });
+        html += '</div>';
+      }
+      if (data.weak_chapters && data.weak_chapters.length > 0) {
+        html += '<div class="stat-row" style="margin-bottom:8px"><span class="stat-pill red">薄弱章节: ' + data.weak_chapters.map(c => c.chapter_id).join(', ') + '</span></div>';
+      }
+      if (data.ai_analysis) html += '<div style="margin-top:8px">' + formatText(data.ai_analysis) + '</div>';
+    } else if (type === 'report') {
+      if (data.report) html += formatText(data.report);
+      else if (data.error) html += '<span style="color:var(--c-rose)">' + data.error + '</span>';
+    }
+
+    document.getElementById(bodyId2).innerHTML = html || '<span style="color:var(--text-tertiary)">暂无分析结果</span>';
+    document.getElementById(bodyId2).classList.add('show');
+  } catch (e) {
+    document.getElementById(loadId2).classList.remove('show');
+    document.getElementById(bodyId2).innerHTML = '<span style="color:var(--c-rose)">请求失败: ' + e.message + '</span>';
+    document.getElementById(bodyId2).classList.add('show');
+  }
+}
+
+/* ===== 工具函数 ===== */
+function emptyState(emoji, text) {
+  return `<div class="empty-state"><div class="emoji">${emoji}</div><div class="text">${text}</div></div>`;
+}
+
+function formatText(text) {
+  if (!text) return '';
+  // 轻量 Markdown 渲染
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`(.+?)`/g, '<code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:12px">$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+function toggleImport() {
+  const area = document.getElementById('importArea');
+  const toggles = document.querySelectorAll('.collapse-toggle');
+  const isHidden = area.style.display === 'none' || !area.classList.contains('show');
+  if (isHidden) {
+    area.classList.add('show'); area.style.display = 'block';
+    toggles.forEach(t => t.textContent = '[ 收起 ]');
+  } else {
+    area.classList.remove('show'); area.style.display = 'none';
+    toggles.forEach(t => t.textContent = '[ 展开 ]');
+  }
+}
+
+async function importGrades() {
+  const input = document.getElementById('gradesInput').value.trim();
+  if (!input) { alert('请输入成绩数据'); return; }
+  const grades = input.split('\n').filter(l => l.trim()).map(l => {
+    try { return JSON.parse(l); } catch { return null; }
+  }).filter(g => g !== null);
+
+  try {
+    const r = await fetch('/api/analytics/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grades }),
+    });
+    const d = await r.json();
+    alert(d.success ? `成功导入 ${d.imported} 条记录` : '导入失败');
+    if (d.success) loadAll();
+  } catch (e) { alert('导入失败: ' + e.message); }
+}
+
+function loadDemo() {
+  const demos = [
+    '{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":85}',
+    '{"student_no":"2025001","student_name":"张三","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":72}',
+    '{"student_no":"2025002","student_name":"李四","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":55}',
+    '{"student_no":"2025002","student_name":"李四","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":48}',
+    '{"student_no":"2025003","student_name":"王五","class_name":"计应1班","chapter_id":"ch04","exam_name":"期中","score":92}',
+    '{"student_no":"2025003","student_name":"王五","class_name":"计应1班","chapter_id":"ch05","exam_name":"期中","score":88}',
+  ];
+  document.getElementById('gradesInput').value = demos.join('\n');
+}
+
+/* ===== 窗口 resize ===== */
+window.addEventListener('resize', () => {
+  Object.values(echarts_instances).forEach(c => c && c.resize());
+});
+
+/* ===== 初始化 ===== */
+loadAll();
+</script>
+</body>
+</html>

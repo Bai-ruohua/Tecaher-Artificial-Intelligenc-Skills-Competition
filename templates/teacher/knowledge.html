@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识库管理 · {{ config.PLATFORM_NAME }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 36px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .25s;
+  background: var(--bg-secondary);
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.upload-zone .icon { font-size: 42px; margin-bottom: 10px; }
+.upload-zone .text { font-size: 15px; color: var(--text-secondary); font-weight: 500; }
+.upload-zone .hint { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
+
+.kb-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.kb-card-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 15px;
+  gap: 8px;
+}
+.kb-card-body { padding: 0; }
+.kb-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  transition: background .15s;
+}
+.doc-item:last-child { border-bottom: none; }
+.doc-item:hover { background: var(--bg-secondary); }
+.doc-item .name { flex: 1; font-weight: 500; }
+.doc-item .meta {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin: 0 8px;
+  white-space: nowrap;
+}
+.doc-item .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 18px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.file-row:last-child { border-bottom: none; }
+.file-row .name { flex: 1; }
+.file-row .detail { color: var(--text-tertiary); font-size: 12px; margin: 0 12px; }
+
+.status-msg {
+  padding: 14px 18px;
+  border-radius: 10px;
+  margin: 12px 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.status-msg .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 36px 18px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+
+<!-- 卡片一：上传课程资料 -->
+<div class="kb-card">
+  <div class="kb-card-header">📂 上传课程资料</div>
+  <div class="kb-card-body">
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+         ondragover="this.classList.add('dragover');event.preventDefault()"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="event.preventDefault();this.classList.remove('dragover');uploadFile(event.dataTransfer.files[0])">
+      <div class="icon">📄</div>
+      <div class="text">点击或拖拽文件到此处上传</div>
+      <div class="hint">支持 PDF、DOCX、TXT、MD 格式，单文件不超过 100MB</div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" style="display:none" onchange="uploadFile(this.files[0])">
+    </div>
+    <div id="uploadStatus" style="display:none"></div>
+  </div>
+</div>
+
+<!-- 卡片二：知识库文档 -->
+<div class="kb-card">
+  <div class="kb-card-header">
+    <span>🧩 知识库文档</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--text-tertiary)" id="docCount">加载中...</span>
+  </div>
+  <div id="docList"><div class="empty-state">加载中...</div></div>
+  <div class="kb-card-footer">
+    <button class="btn btn-sm btn-outline" onclick="clearKnowledge()" style="color:var(--danger);border-color:var(--danger)">清空知识库</button>
+  </div>
+</div>
+
+<!-- 卡片三：已保存的原始文件 -->
+<div class="kb-card">
+  <div class="kb-card-header">
+    <span>📁 已保存的原始文件</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--text-tertiary)" id="fileCount"></span>
+  </div>
+  <div id="uploadedFilesInfo"><div class="empty-state">暂无文件</div></div>
+</div>
+
+</div>
+
+<script>
+// CURRENT_COURSE 由 _course_bar.html 声明（var），这里直接引用
+
+// ===== 加载知识库文档列表 =====
+async function loadDocs(){
+  const cid = CURRENT_COURSE ? '?course_id='+CURRENT_COURSE : '';
+  try{
+    const r = await (await fetch('/api/teacher/knowledge/docs'+cid)).json();
+    if(!r.success) throw new Error(r.error);
+    document.getElementById('docCount').textContent = r.count + ' 个切片';
+    const el = document.getElementById('docList');
+    if(!r.documents || r.documents.length === 0){
+      el.innerHTML = '<div class="empty-state">📭 暂无文档，上传课程资料后自动建立知识库</div>';
+      return;
+    }
+    el.innerHTML = r.documents.map(d =>
+      `<div class="doc-item">
+        <span class="name">📄 ${d.title || d.source || '未知'}</span>
+        <span class="tag">#${d.id}</span>
+        <span class="meta">${d.source ? (d.source.startsWith('__auto__') ? 'AI生成' : d.source) : ''}</span>
+        <span class="meta">${d.chapter ? '章节 '+d.chapter : ''}</span>
+      </div>`
+    ).join('');
+  }catch(e){
+    document.getElementById('docList').innerHTML = '<div class="empty-state">加载失败: '+e.message+'</div>';
+  }
+}
+
+// ===== 加载已上传的原始文件列表 =====
+async function loadUploadedFiles(){
+  if(!CURRENT_COURSE) return;
+  try{
+    const r = await (await fetch('/api/course/'+CURRENT_COURSE+'/uploaded-files')).json();
+    const el = document.getElementById('uploadedFilesInfo');
+    const fc = document.getElementById('fileCount');
+    if(r.success && r.files && r.files.length > 0){
+      fc.textContent = r.count + ' 个文件';
+      el.innerHTML = r.files.map(f =>
+        `<div class="file-row">
+          <span class="name">📄 ${f.name}</span>
+          <span class="detail">${f.size_str}</span>
+          <span class="detail">${f.modified}</span>
+          <span style="display:flex;gap:4px">
+            <a href="/api/course/${CURRENT_COURSE}/download/${encodeURIComponent(f.name)}" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:11px" download>下载</a>
+            <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:11px;color:var(--danger);border-color:var(--danger)" onclick="deleteFile('${f.name}')">删除</button>
+          </span>
+        </div>`
+      ).join('');
+    } else {
+      fc.textContent = '';
+      el.innerHTML = '<div class="empty-state">📭 暂无已保存的文件</div>';
+    }
+  }catch(e){}
+}
+
+// ===== 删除单个文件 =====
+async function deleteFile(name){
+  if(!confirm('确定要删除文件「'+name+'」吗？知识库中对应的切片也会被删除。')) return;
+  try{
+    const r = await (await fetch('/api/course/'+CURRENT_COURSE+'/uploaded-files/'+encodeURIComponent(name), {method:'DELETE'})).json();
+    if(r.success){
+      loadUploadedFiles();
+      loadDocs();
+    } else {
+      alert('删除失败: '+(r.error||'未知错误'));
+    }
+  }catch(e){
+    alert('删除失败: '+e.message);
+  }
+}
+
+// ===== 上传文件 =====
+async function uploadFile(file){
+  if(!file) return;
+  const st = document.getElementById('uploadStatus');
+  st.style.display = 'block';
+  st.className = 'status-msg';
+  st.style.background = 'var(--bg-secondary)';
+  st.innerHTML = '⏳ 正在上传 <strong>'+file.name+'</strong>...';
+  const fd = new FormData();
+  fd.append('file', file);
+  try{
+    const r = await (await fetch('/api/teacher/knowledge/ingest',{method:'POST',body:fd})).json();
+    if(r.success){
+      const chunks = r.data.chunks || r.data.saved || 0;
+      st.style.background = '#ECFDF5';
+      st.style.color = '#065F46';
+      st.innerHTML = '✅ 上传成功！<strong>'+file.name+'</strong> 已解析为 <strong>'+chunks+'</strong> 个知识切片'
+        + '<div class="actions">'
+        + '<button class="btn btn-primary btn-sm" onclick="generateFromUploads()" id="genBtn">🧠 根据上传内容生成课程</button>'
+        + '</div>';
+      loadDocs();
+      loadUploadedFiles();
+      // 上传后自动优化知识框架
+      const cid = CURRENT_COURSE;
+      if(cid){
+        fetch('/api/course/'+cid+'/merge-knowledge', {method:'POST'})
+          .then(r2 => r2.json())
+          .then(d2 => { if(d2.success) console.log('知识框架已优化'); })
+          .catch(()=>{});
+      }
+    } else {
+      st.style.background = '#FEF2F2';
+      st.style.color = '#991B1B';
+      st.innerHTML = '❌ 上传失败：' + (r.error || '未知错误');
+    }
+  }catch(e){
+    st.style.background = '#FEF2F2';
+    st.style.color = '#991B1B';
+    st.innerHTML = '❌ 请求失败：' + e.message;
+  }
+}
+
+// ===== 清空知识库 =====
+async function clearKnowledge(){
+  if(!confirm('确定要清空当前课程的知识库吗？此操作不可撤销。')) return;
+  const cid = CURRENT_COURSE ? '?course_id='+CURRENT_COURSE : '';
+  try{
+    const r = await (await fetch('/api/teacher/knowledge/clear'+cid, {method:'POST'})).json();
+    if(r.success){ loadDocs(); document.getElementById('docCount').textContent = '已清空'; }
+  }catch(e){ alert('清空失败: '+e.message); }
+}
+
+// ===== 根据上传内容生成课程 =====
+async function generateFromUploads(){
+  if(!CURRENT_COURSE) return;
+  const btn = document.getElementById('genBtn');
+  if(btn) { btn.disabled=true; btn.textContent='⏳ 正在生成...'; }
+  try{
+    const r = await (await fetch('/api/course/'+CURRENT_COURSE+'/generate-from-uploads', {method:'POST'})).json();
+    if(r.success){
+      const st = document.getElementById('uploadStatus');
+      st.style.background = '#ECFDF5';
+      st.style.color = '#065F46';
+      st.innerHTML = '🎉 课程内容生成成功！已生成 <strong>'+r.details?.chapters+'</strong> 个章节，<strong>'+r.details?.documents+'</strong> 份知识文档'
+        + '<div class="actions"><a href="/teacher/dashboard" class="btn btn-primary btn-sm">进入首页查看</a></div>';
+      loadDocs();
+    } else {
+      alert('生成失败: ' + (r.error || r.message || '未知错误'));
+    }
+  }catch(e){
+    alert('请求失败: ' + e.message);
+  }
+  if(btn) { btn.disabled=false; btn.textContent='🧠 根据上传内容生成课程'; }
+}
+
+// ===== 页面初始化 =====
+loadDocs();
+loadUploadedFiles();
+</script>
+</body>
+</html>

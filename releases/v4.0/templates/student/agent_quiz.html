@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>刷题训练 Agent</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="student">
+<nav class="navbar">
+  <a href="{% if role == 'teacher' %}/teacher/dashboard{% else %}/student/dashboard{% endif %}" class="navbar-brand">{{ config.SCHOOL_NAME }}{% if role == 'teacher' %} · 教师工作台{% else %} · 学生学习中心{% endif %}</a>
+  <div class="navbar-nav">
+    {% if role == 'teacher' %}
+      <a href="/teacher/dashboard" class="nav-link">仪表盘</a>
+      <a href="/teacher/qa" class="nav-link">RAG问答</a>
+      <a href="/teacher/exam-preview" class="nav-link">出题</a>
+      <a href="/teacher/digital" class="nav-link">数字人</a>
+      <a href="/teacher/graph" class="nav-link">知识图谱</a>
+    {% else %}
+      <a href="/student/dashboard" class="nav-link">仪表盘</a>
+      <a href="/student/qa" class="nav-link">RAG问答</a>
+      <a href="/student/quiz" class="nav-link">刷题</a>
+      <a href="/student/digital" class="nav-link">数字人</a>
+      <a href="/student/graph" class="nav-link">知识图谱</a>
+    {% endif %}
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="row">
+    <div class="col">
+      <div class="card"><div class="card-header">🎯 刷题训练</div>
+        <div class="form-group"><label>章节</label><select id="chapter">{% for ch in chapters %}<option value="{{ ch.id }}">{{ ch.title }}（{{ ch.level }}）</option>{% endfor %}</select></div>
+        <div class="form-group"><label>题数</label><input type="number" id="count" value="5" min="3" max="20"></div>
+        <div class="form-group"><label>难度</label><select id="difficulty"><option value="A">A (基础)</option><option value="B" selected>B (中等)</option><option value="C">C (困难)</option></select></div>
+        <button class="btn btn-primary" onclick="startQuiz()" style="width:100%">开始刷题</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card"><div class="card-header">📕 我的错题本</div><div id="wrong-book" style="font-size:13px;max-height:300px;overflow-y:auto">点击左侧"加载错题本"</div>
+        <button class="btn btn-outline btn-sm" onclick="loadWrongBook()" style="margin-top:8px">加载错题本</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 答题区 -->
+  <div id="quiz-area" style="display:none">
+    <div class="card"><div class="card-header" id="quiz-title">题目</div>
+      <div id="questions-container"></div>
+      <button class="btn btn-primary" onclick="submitQuiz()" style="width:100%;margin-top:12px">提交答案</button>
+    </div>
+  </div>
+
+  <!-- 结果区 -->
+  <div id="result-area" style="display:none">
+    <div class="card"><div class="card-header" id="result-title">答题结果</div>
+      <div id="results-container"></div>
+      <button class="btn btn-outline" onclick="resetQuiz()" style="margin-top:8px">再来一轮</button>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在出题...</div>
+</div>
+
+<script>
+let currentQuestions=[],studentId='demo_student',currentChapter='';
+
+async function startQuiz(){
+  document.getElementById('quiz-area').style.display='none';document.getElementById('result-area').style.display='none';
+  document.getElementById('loading').classList.add('show');
+  currentChapter=document.getElementById('chapter').value;
+  const r=await fetch('/api/student/quiz/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({chapter_id:currentChapter,count:parseInt(document.getElementById('count').value),difficulty:document.getElementById('difficulty').value})});
+  const d=await r.json();document.getElementById('loading').classList.remove('show');
+  if(d.success && d.data.questions.length>0){
+    currentQuestions=d.data.questions;
+    document.getElementById('quiz-title').innerText=`${d.data.chapter_title||'练习'} (共${currentQuestions.length}题)`;
+    let html='';
+    currentQuestions.forEach((q,i)=>{
+      let ahtml='';
+      if(q.type==='choice' && q.options){q.options.forEach((o,j)=>{ahtml+=`<label style="display:block;padding:8px;margin:4px 0;border:1px solid var(--border);border-radius:6px;cursor:pointer"><input type="radio" name="q${i}" value="${String.fromCharCode(65+j)}"> ${o}</label>`})}
+      else if(q.type==='judge'){ahtml='<label style="display:block;padding:8px;margin:4px 0;border:1px solid var(--border);border-radius:6px;cursor:pointer"><input type="radio" name="q'+i+'" value="A"> 正确</label><label style="display:block;padding:8px;margin:4px 0;border:1px solid var(--border);border-radius:6px;cursor:pointer"><input type="radio" name="q'+i+'" value="B"> 错误</label>'}
+      else{ahtml=`<input type="text" name="q${i}" placeholder="请输入答案..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px">`}
+      html+=`<div style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px"><p style="font-weight:500;margin-bottom:8px">${i+1}. [${q.type==='choice'?'选择':q.type==='judge'?'判断':'填空'}] ${q.question}</p>${ahtml}</div>`;
+    });
+    document.getElementById('questions-container').innerHTML=html;
+    document.getElementById('quiz-area').style.display='block';
+  }else alert('出题失败: '+(d.error||d.data?.error||'未知错误'));
+}
+
+async function submitQuiz(){
+  const answers={};
+  currentQuestions.forEach((q,i)=>{
+    if(q.type==='choice'||q.type==='judge'){const el=document.querySelector(`input[name="q${i}"]:checked`);answers[i]=el?el.value:''}
+    else{const el=document.querySelector(`input[name="q${i}"]`);answers[i]=el?el.value:''}
+  });
+  const r=await fetch('/api/student/quiz/submit',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({student_id:studentId,chapter_id:currentChapter,questions:currentQuestions,answers})});
+  const d=await r.json();
+  if(d.success){
+    const data=d.data;
+    document.getElementById('result-title').innerHTML=`答题结果：正确 <b>${data.correct}</b>/${data.total} 题（正确率 <b>${data.accuracy}%</b>）`;
+    let html='';
+    data.results.forEach((res,i)=>{
+      const tag=res.is_correct?'<span class="tag tag-correct">正确</span>':'<span class="tag tag-wrong">错误</span>';
+      html+=`<div style="margin-bottom:12px;padding:12px;background:${res.is_correct?'#F0FDF4':'#FFF5F5'};border-radius:8px;border-left:3px solid ${res.is_correct?'#22C55E':'#EF4444'}"><p><b>${i+1}.</b> ${tag} ${res.question}</p>${!res.is_correct?`<p style="font-size:12px;margin-top:4px">你的答案：<span style="color:#EF4444">${res.student_answer||'(空)'}</span> → 正确答案：<span style="color:#22C55E">${res.correct_answer}</span></p><p style="font-size:12px;color:var(--text-secondary)">${res.explanation}</p>`:''}</div>`;
+    });
+    document.getElementById('results-container').innerHTML=html;
+    document.getElementById('quiz-area').style.display='none';document.getElementById('result-area').style.display='block';
+  }else alert('提交失败: '+d.error);
+}
+
+function resetQuiz(){document.getElementById('result-area').style.display='none';startQuiz();}
+
+async function loadWrongBook(){
+  const r=await fetch('/api/student/quiz/wrong-book?student_id='+studentId);const d=await r.json();
+  if(d.success){
+    let html=`<p style="font-size:12px;color:var(--text-secondary)">${d.summary.replace(/\n/g,'<br>')}</p>`;
+    d.items.forEach((item,i)=>{
+      html+=`<div style="margin-bottom:8px;padding:8px;background:var(--bg);border-radius:6px;font-size:12px"><p><b>${i+1}.</b> ${(item.question_text||'').substring(0,50)}</p><p>错误：<span style="color:#EF4444">${item.wrong_answer||''}</span> → <span style="color:#22C55E">${item.correct_answer||''}</span></p></div>`;
+    });
+    document.getElementById('wrong-book').innerHTML=html||'暂无错题， 继续加油！';
+  }
+}
+</script>
+</body>
+</html>

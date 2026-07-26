@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>教师工作台 · {{ config.PLATFORM_NAME }} V{{ config.PLATFORM_VERSION }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/func.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 教师工作台</a>
+  <div class="navbar-nav">
+    <a href="/teacher/dashboard" class="nav-link">首页</a>
+    <a href="/teacher/students" class="nav-link">课程/学生</a>
+    <a href="/teacher/lesson-prep" class="nav-link">备课</a>
+    <a href="/teacher/exam" class="nav-link">命题</a>
+    <a href="/teacher/grading" class="nav-link">批改</a>
+    <a href="/teacher/analytics" class="nav-link">学情</a>
+    <span style="font-size:13px;color:var(--text-secondary);margin:0 8px">{{ teacher.teacher_name }}</span>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+
+<div class="container">
+  <!-- 课程上下文选择条 -->
+  <div class="course-bar">
+    <span class="course-label">当前课程</span>
+    <select id="courseSelect" onchange="switchCourse(this.value)">
+      {% for c in courses %}
+      <option value="{{ c.id }}" {% if c.id == course_id %}selected{% endif %}>{{ c.course_name }}{% if c.semester %} ({{ c.semester }}){% endif %}</option>
+      {% endfor %}
+    </select>
+    <span class="course-name" id="courseName">{% if course %}{{ course.course_name }}{% else %}未选择课程{% endif %}</span>
+    <a href="/teacher/students" class="btn btn-outline btn-sm" style="margin-left:auto">+ 新建/管理课程</a>
+  </div>
+
+  <!-- 关键指标摘要 -->
+  <div class="metric-row">
+    <div class="metric-card"><div class="metric-label">学生总数</div><div class="metric-value" id="m-total">-</div></div>
+    <div class="metric-card"><div class="metric-label">活跃学生</div><div class="metric-value" id="m-active">-</div></div>
+    <div class="metric-card"><div class="metric-label">平均正确率</div><div class="metric-value" id="m-accuracy">-</div></div>
+    <div class="metric-card"><div class="metric-label">平均综合分</div><div class="metric-value" id="m-composite">-</div></div>
+  </div>
+
+  <!-- 功能区 3×3 -->
+  <div class="section-title"><span class="bar"></span>功能中心</div>
+  <div class="func-grid">
+    <a class="func-card c1" href="/teacher/students">
+      <div class="fc-head">
+        <div class="fc-icon">📚</div>
+        <span class="fc-badge" id="badge-courses">-</span>
+      </div>
+      <div class="fc-title">课程管理</div>
+      <div class="fc-desc">创建课程、上传知识库文档、管理章节体系</div>
+    </a>
+    <a class="func-card c2" href="/teacher/students">
+      <div class="fc-head">
+        <div class="fc-icon">👥</div>
+        <span class="fc-badge" id="badge-students">-</span>
+      </div>
+      <div class="fc-title">学生管理</div>
+      <div class="fc-desc">批量生成学生账号、选课、查看名单</div>
+    </a>
+    <a class="func-card c3" href="/teacher/lesson-prep">
+      <div class="fc-head">
+        <div class="fc-icon">📝</div>
+        <span class="fc-badge" id="badge-lessons">-</span>
+      </div>
+      <div class="fc-title">智能备课</div>
+      <div class="fc-desc">AI 生成教案、课件大纲、思政融入、分层实训</div>
+    </a>
+    <a class="func-card c4" href="/teacher/qa">
+      <div class="fc-head">
+        <div class="fc-icon">💬</div>
+        <span class="fc-badge" id="badge-qa">-</span>
+      </div>
+      <div class="fc-title">AI 智能答疑</div>
+      <div class="fc-desc">基于课程知识库的 RAG 问答（师生共用）</div>
+    </a>
+    <a class="func-card c5" href="/teacher/exam-preview">
+      <div class="fc-head">
+        <div class="fc-icon">🎯</div>
+        <span class="fc-badge" id="badge-questions">-</span>
+      </div>
+      <div class="fc-title">智能出题与判分</div>
+      <div class="fc-desc">按章节出题、自动组卷、代码批改（师生共用）</div>
+    </a>
+    <a class="func-card c6" href="/teacher/digital">
+      <div class="fc-head">
+        <div class="fc-icon">🎙️</div>
+        <span class="fc-badge" id="badge-digital">-</span>
+      </div>
+      <div class="fc-title">数字人讲解</div>
+      <div class="fc-desc">生成知识点讲解数字人视频（师生共用）</div>
+    </a>
+    <a class="func-card c7" href="/teacher/graph">
+      <div class="fc-head">
+        <div class="fc-icon">🕸️</div>
+        <span class="fc-badge" id="badge-graph">-</span>
+      </div>
+      <div class="fc-title">知识图谱</div>
+      <div class="fc-desc">可视化课程知识网络与学习路径（师生共用）</div>
+    </a>
+    <a class="func-card c8" href="/teacher/grading">
+      <div class="fc-head">
+        <div class="fc-icon">✅</div>
+        <span class="fc-badge" id="badge-grades">-</span>
+      </div>
+      <div class="fc-title">代码批改</div>
+      <div class="fc-desc">单份/批量代码评分、Bug 诊断、相似度检测</div>
+    </a>
+    <a class="func-card c9" href="/teacher/analytics">
+      <div class="fc-head">
+        <div class="fc-icon">📊</div>
+        <span class="fc-badge" id="badge-analytics">-</span>
+      </div>
+      <div class="fc-title">学情看板</div>
+      <div class="fc-desc">排名 / 能力雷达 / 掌握甘特 综合洞察</div>
+    </a>
+  </div>
+
+  <!-- 学情看板（可折叠） -->
+  <div class="section-title">
+    <span class="bar"></span>学情看板
+    <span class="overview-toggle" onclick="toggleOverview()" id="ovToggle">[ 收起 ]</span>
+  </div>
+  <div id="overview">
+    <div class="dashboard-grid">
+      <div class="chart-card">
+        <div class="chart-title">班级能力雷达图</div>
+        <div class="chart-wrap"><canvas id="radarChart" role="img" aria-label="班级能力雷达图"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">知识点掌握甘特图</div>
+        <div id="ganttChart" style="height:320px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">学生排名榜</div>
+      <table id="rankTable">
+        <thead><tr><th>排名</th><th>学号</th><th>姓名</th><th>班级</th><th>答题数</th><th>正确率</th><th>平均分</th><th>学习时长</th><th>错题数</th><th>综合分</th></tr></thead>
+        <tbody id="rankBody"><tr><td colspan="10" style="text-align:center;color:var(--text-tertiary)">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function switchCourse(cid){
+  if(!cid) return;
+  await fetch('/api/course/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course_id:parseInt(cid)})});
+  location.reload();
+}
+function toggleOverview(){
+  const ov=document.getElementById('overview'), t=document.getElementById('ovToggle');
+  const hidden=ov.style.display==='none';
+  ov.style.display=hidden?'block':'none';
+  t.textContent=hidden?'[ 收起 ]':'[ 展开 ]';
+}
+async function loadDashboard(){
+  const url='/api/teacher/dashboard'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'');
+  try{
+    const json=await (await fetch(url)).json();
+    if(!json.success)return;
+    const d=json.data;
+    document.getElementById('m-total').textContent=d.summary.total_students;
+    document.getElementById('m-active').textContent=d.summary.active_students;
+    document.getElementById('m-accuracy').textContent=d.summary.avg_accuracy+'%';
+    document.getElementById('m-composite').textContent=d.summary.avg_composite;
+    renderRadar(d.class_radar||[]);
+    renderGantt(d.class_gantt||[]);
+    renderRankings(d.rankings||[]);
+  }catch(e){console.error(e);}
+}
+function renderRadar(radar){
+  const ctx=document.getElementById('radarChart');
+  if(window._radarChart)window._radarChart.destroy();
+  window._radarChart=new Chart(ctx,{type:'radar',data:{labels:radar.map(r=>r.label),datasets:[{label:'班级平均',data:radar.map(r=>r.score),backgroundColor:'rgba(55,138,221,0.15)',borderColor:'rgba(55,138,221,0.8)',borderWidth:2,pointBackgroundColor:'rgba(55,138,221,1)',pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:100,ticks:{stepSize:20,font:{size:11}},pointLabels:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+}
+function renderGantt(gantt){
+  const c=document.getElementById('ganttChart');
+  if(!gantt||gantt.length===0){c.innerHTML='<div style="text-align:center;color:var(--text-tertiary);padding:40px">暂无数据</div>';return;}
+  const lc={mastered:'gantt-mastered',in_progress:'gantt-progress',weak:'gantt-weak',very_weak:'gantt-vweak',not_started:'gantt-none'};
+  const ll={mastered:'已掌握',in_progress:'进行中',weak:'薄弱',very_weak:'很弱',not_started:'未开始'};
+  let h='<table><thead><tr><th>章节</th><th>掌握度</th><th>状态</th><th>答题量</th></tr></thead><tbody>';
+  for(const g of gantt){
+    h+=`<tr><td style="font-size:12px">${g.chapter_title}</td><td><div class="gantt-bar ${lc[g.mastery_level]||'gantt-none'}" style="width:${g.mastery_percent}%"></div> ${g.mastery_percent}%</td><td style="font-size:12px">${ll[g.mastery_level]||'-'}</td><td style="font-size:12px">${g.total_attempts}</td></tr>`;
+  }
+  c.innerHTML=h+'</tbody></table>';
+}
+function renderRankings(rankings){
+  const tb=document.getElementById('rankBody');
+  if(!rankings||rankings.length===0){tb.innerHTML='<tr><td colspan="10" style="text-align:center;color:var(--text-tertiary)">暂无学生数据，请先创建学生账号</td></tr>';return;}
+  let h='';
+  for(const r of rankings){
+    const rc=r.rank===1?'rank-1':r.rank===2?'rank-2':r.rank===3?'rank-3':'rank-other';
+    h+=`<tr><td><span class="rank-badge ${rc}">${r.rank}</span></td><td>${r.student_no}</td><td>${r.student_name}</td><td>${r.class_name||'-'}</td><td>${r.total_attempts}</td><td>${r.accuracy}%</td><td>${r.avg_score}</td><td>${r.study_minutes}min</td><td>${r.wrong_count}</td><td style="font-weight:600;color:var(--primary)">${r.composite_score}</td></tr>`;
+  }
+  tb.innerHTML=h;
+}
+loadDashboard();
+loadModuleStats();
+
+async function loadModuleStats(){
+  const url='/api/teacher/module-stats'+(CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'');
+  try{
+    const json=await (await fetch(url)).json();
+    if(!json.success)return;
+    const s=json.stats;
+    const map={
+      'badge-courses': s.courses+' 门课程',
+      'badge-students': s.students+' 名学生',
+      'badge-lessons': s.lessons+' 份教案',
+      'badge-qa': s.qa+' 条问答',
+      'badge-questions': s.questions+' 道题目',
+      'badge-digital': s.digital+' 个缓存',
+      'badge-graph': s.graph+' 个节点',
+      'badge-grades': s.grades+' 份成绩',
+      'badge-analytics': s.analytics+' 次答题',
+    };
+    for(const[id,val]of Object.entries(map)){
+      const el=document.getElementById(id);
+      if(el){
+        el.textContent=val;
+        const n=parseInt(val);
+        if(n>0)el.classList.add('has-data');
+      }
+    }
+  }catch(e){console.error('module-stats error',e);}
+}
+</script>
+</body>
+</html>

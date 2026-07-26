@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI备课助手</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<nav class="navbar"><a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 教师工作台</a><div class="navbar-nav"><a href="/teacher/dashboard" class="nav-link">仪表盘</a><a href="/teacher/lesson-prep" class="nav-link">备课</a><a href="/teacher/exam" class="nav-link">命题</a><a href="/teacher/grading" class="nav-link">批改</a><a href="/teacher/analytics" class="nav-link">学情</a><a href="/teacher/students" class="nav-link">学生管理</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+  <h2 style="margin-bottom:24px">📝 AI备课助手</h2>
+
+  <!-- 执行步骤提示 -->
+  <div class="step-indicator" id="stepIndicator" style="display:none">
+    <span class="step" id="step1">① 解析教学目标</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step2">② 匹配课程知识点</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step3">③ AI 生成内容</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step4">④ 格式校验</span>
+    <span class="step-arrow">→</span>
+    <span class="step" id="step5">⑤ 生成完成</span>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div class="card-header">选择章节和功能</div>
+        <div class="form-group"><label>章节</label><select id="chapter"><option value="">-- 请选择章节 --</option>{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}（{{ ch.level }}）</option>{% endfor %}</select></div>
+        <div class="form-group"><label>功能</label><select id="func-type"><option value="lesson_plan">教案生成</option><option value="courseware">课件大纲</option><option value="ideology">思政融入方案</option><option value="practice">分层实训设计</option></select></div>
+        <div class="form-group"><label>额外要求（可选）</label><textarea id="extra" rows="2" placeholder="如：侧重实践操作、增加互动环节..."></textarea></div>
+        <button class="btn btn-primary" onclick="generate()" style="width:100%">开始生成</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="card-header">章节信息预览</div>
+        <div id="chapter-info" style="color:var(--text-secondary);font-size:14px">选择章节后可预览知识体系</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在生成内容...</div>
+  <div class="content-area" id="result"></div>
+</div>
+
+<script>
+const apiMap = {lesson_plan:'/api/lesson-plan',courseware:'/api/courseware',ideology:'/api/ideology',practice:'/api/practice'};
+
+document.getElementById('chapter').addEventListener('change', async function(){
+  if(!this.value){document.getElementById('chapter-info').innerHTML='选择章节后可预览知识体系';return}
+  const resp = await fetch('/api/chapter/'+this.value);
+  const data = await resp.json();
+  if(data.success){
+    const ch = data.chapter;
+    document.getElementById('chapter-info').innerHTML = `
+      <h4>${ch.title}</h4>
+      <p><strong>级别：</strong>${ch.level}</p>
+      <p><strong>教学目标：</strong>${ch.objectives.map(o=>'<br>  '+o).join('')}</p>
+      <p><strong>重点：</strong>${ch.key_points.map(p=>'<br>  '+p).join('')}</p>
+      <p><strong>难点：</strong>${ch.difficulties.map(d=>'<br>  '+d).join('')}</p>`;
+  }
+});
+
+async function generate(){
+  const ch = document.getElementById('chapter').value;
+  const func = document.getElementById('func-type').value;
+  if(!ch){alert('请选择章节');return}
+  // 显示步骤提示
+  document.getElementById('stepIndicator').style.display='flex';
+  [1,2,3,4,5].forEach(i=>document.getElementById('step'+i).className='step');
+  await sleep(400); document.getElementById('step1').className='step active';
+  await sleep(800); document.getElementById('step1').className='step done';
+  document.getElementById('step2').className='step active';
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('result').classList.remove('show');
+  const body = {chapter_id:ch};
+  if(func==='lesson_plan') body.extra_requirements = document.getElementById('extra').value;
+  if(func==='courseware') body.lesson_plan_text = document.getElementById('extra').value;
+  if(func==='ideology') body.topic = document.getElementById('extra').value;
+  try{
+    document.getElementById('step2').className='step done';
+    document.getElementById('step3').className='step active';
+    const resp = await fetch(apiMap[func],{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    document.getElementById('step3').className='step done';
+    document.getElementById('step4').className='step active';
+    await sleep(300);
+    const data = await resp.json();
+    document.getElementById('step4').className='step done';
+    document.getElementById('loading').classList.remove('show');
+    if(data.success){
+      document.getElementById('step5').className='step active';
+      await sleep(500);
+      document.getElementById('step5').className='step done';
+      const el = document.getElementById('result');
+      el.innerHTML = data.content + '\n<span class="ai-tag">AI生成，仅供教师参考调整</span>';
+      el.classList.add('show');
+    }else{
+      alert('生成失败: '+data.error);
+    }
+  }catch(e){document.getElementById('loading').classList.remove('show');alert('请求失败: '+e.message)}
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+</script>
+</body>
+</html>

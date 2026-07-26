@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI命题助手</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+{% include 'teacher/_navbar.html' %}
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+  <h2 style="margin-bottom:24px">📋 AI命题助手</h2>
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div class="card-header">练习题目生成</div>
+        <div class="form-group"><label>章节</label><select id="chapter">{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label>题型</label><select id="qtype"><option value="choice">选择题</option><option value="fill">填空题</option><option value="judge">判断题</option><option value="programming">编程题</option><option value="short_answer">简答题</option></select></div>
+        <div class="form-group"><label>数量</label><input type="number" id="count" value="5" min="1" max="20"></div>
+        <div class="form-group"><label>难度</label><select id="difficulty"><option value="A">A (基础)</option><option value="B" selected>B (中等)</option><option value="C">C (困难)</option></select></div>
+        <button class="btn btn-primary" onclick="generateQuestions()" style="width:100%">生成题目</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="card-header">完整试卷生成</div>
+        <div class="form-group"><label>章节范围</label><select id="paper-chapter">{% for ch in chapters %}<option value="{{ ch.chapter_id }}">{{ ch.title }}</option>{% endfor %}</select></div>
+        <button class="btn btn-primary" onclick="generatePaper()" style="width:100%">生成完整试卷</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在生成题目...</div>
+  <div class="content-area" id="result"></div>
+</div>
+
+<script>
+async function generateQuestions(){
+  const ch=document.getElementById('chapter').value, qt=document.getElementById('qtype').value,
+    cnt=parseInt(document.getElementById('count').value), diff=document.getElementById('difficulty').value;
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chapter_id:ch,q_type:qt,count:cnt,difficulty:diff})});
+    const d=await r.json();
+    document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}
+    else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function generatePaper(){
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/exam-paper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chapter_id:document.getElementById('paper-chapter').value})});
+    const d=await r.json();
+    document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}
+    else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+</script>
+</body>
+</html>

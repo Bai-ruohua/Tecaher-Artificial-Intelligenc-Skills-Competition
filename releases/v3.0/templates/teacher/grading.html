@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI批改助手</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<nav class="navbar"><a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 教师工作台</a><div class="navbar-nav"><a href="/teacher/dashboard" class="nav-link">仪表盘</a><a href="/teacher/lesson-prep" class="nav-link">备课</a><a href="/teacher/exam" class="nav-link">命题</a><a href="/teacher/grading" class="nav-link">批改</a><a href="/teacher/analytics" class="nav-link">学情</a><a href="/teacher/students" class="nav-link">学生管理</a><a href="/logout" class="nav-link" style="color:var(--danger)">退出</a></div></nav>
+
+<div class="container">
+  <h2 style="margin-bottom:24px">✍️ AI批改助手</h2>
+  <div class="row">
+    <div class="col">
+      <div class="card"><div class="card-header">代码评分</div>
+        <div class="form-group"><label>题目描述</label><textarea id="task-desc" rows="2" placeholder="如：编写函数实现斐波那契数列..."></textarea></div>
+        <div class="form-group"><label>学生代码</label><textarea id="code" rows="8" placeholder="粘贴学生提交的Python代码..."></textarea></div>
+        <button class="btn btn-primary" onclick="gradeCode()" style="width:100%">AI评分</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card"><div class="card-header">Bug诊断</div>
+        <div class="form-group"><label>代码（含Bug）</label><textarea id="bug-code" rows="6" placeholder="粘贴有错误的代码..."></textarea></div>
+        <div class="form-group"><label>错误信息（可选）</label><input type="text" id="error-msg" placeholder="如：NameError: name 'x' is not defined"></div>
+        <button class="btn btn-outline" onclick="diagnoseBug()" style="width:100%">诊断Bug</button>
+      </div>
+      <div class="card"><div class="card-header">代码相似度检测</div>
+        <div class="form-group"><label>粘贴多份代码（用---分隔）</label><textarea id="code-list" rows="6" placeholder="代码1&#10;---&#10;代码2&#10;---&#10;代码3"></textarea></div>
+        <button class="btn btn-outline" onclick="checkSimilarity()" style="width:100%">检测相似度</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span>AI正在分析...</div>
+  <div class="content-area" id="result"></div>
+</div>
+
+<script>
+async function gradeCode(){
+  if(!document.getElementById('code').value.trim()){alert('请粘贴学生代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/grade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('code').value,task_description:document.getElementById('task-desc').value})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function diagnoseBug(){
+  if(!document.getElementById('bug-code').value.trim()){alert('请粘贴代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('bug-code').value,error_message:document.getElementById('error-msg').value})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){document.getElementById('result').innerHTML=d.content;document.getElementById('result').classList.add('show')}else alert(d.error);
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+async function checkSimilarity(){
+  if(!document.getElementById('code-list').value.trim()){alert('请粘贴至少2份代码');return}
+  const codes=document.getElementById('code-list').value.split('---').filter(c=>c.trim());
+  if(codes.length<2){alert('请用---分隔至少2份代码');return}
+  document.getElementById('loading').classList.add('show');document.getElementById('result').classList.remove('show');
+  try{
+    const r=await fetch('/api/similarity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code_list:codes})});
+    const d=await r.json();document.getElementById('loading').classList.remove('show');
+    if(d.success){
+      let html='<h3>相似度检测结果</h3><table><tr><th>代码A</th><th>代码B</th><th>相似度</th><th>等级</th></tr>';
+      d.data.suspicious.forEach(s=>{html+=`<tr><td>#${s.i+1}</td><td>#${s.j+1}</td><td>${(s.similarity*100).toFixed(0)}%</td><td>${s.level}</td></tr>`});
+      html+='</table>';
+      if(!d.data.suspicious.length) html+='<p style="color:green">未发现明显相似代码</p>';
+      document.getElementById('result').innerHTML=html;document.getElementById('result').classList.add('show');
+    }
+  }catch(e){document.getElementById('loading').classList.remove('show');alert(e.message)}
+}
+</script>
+</body>
+</html>

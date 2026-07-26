@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识库管理 · {{ config.PLATFORM_NAME }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all .2s; margin-bottom: 16px; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-light); }
+.upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+.upload-zone .text { font-size: 14px; color: var(--text-secondary); }
+.upload-zone .hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+.doc-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.doc-item:last-child { border-bottom: none; }
+.doc-item .name { flex:1; }
+.doc-item .meta { color: var(--text-tertiary); font-size: 12px; margin: 0 12px; white-space: nowrap; }
+.empty-state { text-align: center; padding: 40px; color: var(--text-tertiary); font-size: 14px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/teacher/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 知识库管理</a>
+  <div class="navbar-nav">
+    <a href="/teacher/dashboard" class="nav-link">返回首页</a>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+<div class="container">
+{% include 'teacher/_course_bar.html' %}
+
+<div class="card">
+  <div class="card-header">📂 上传课程资料</div>
+  <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📄</div>
+    <div class="text">点击或拖拽文件到此处上传</div>
+    <div class="hint">支持 PDF、DOCX、TXT、MD 格式</div>
+    <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" style="display:none" onchange="uploadFile(this.files[0])">
+  </div>
+  <div id="uploadStatus" style="display:none;padding:12px;border-radius:8px;margin-bottom:12px"></div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span>📚 知识库文档</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--text-secondary)" id="docCount">加载中...</span>
+  </div>
+  <div id="docList"><div class="empty-state">加载中...</div></div>
+  <div style="margin-top:12px;text-align:right">
+    <button class="btn btn-sm btn-outline" onclick="clearKnowledge()" style="color:var(--danger);border-color:var(--danger)">清空知识库</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+const CURRENT_COURSE = {{ course_id or 'null' }};
+async function loadDocs(){
+  const cid=CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'';
+  try{
+    const r=await (await fetch('/api/teacher/knowledge/docs'+cid)).json();
+    if(!r.success)throw new Error(r.error);
+    document.getElementById('docCount').textContent='共 '+r.count+' 个文档切片';
+    const el=document.getElementById('docList');
+    if(!r.documents||r.documents.length===0){
+      el.innerHTML='<div class="empty-state">暂无文档，上传课程资料后自动建立知识库</div>';
+      return;
+    }
+    el.innerHTML=r.documents.map(d=>`
+      <div class="doc-item">
+        <span class="name">${d.source||'未知来源'}</span>
+        <span class="meta">${d.chapter?'章节 '+d.chapter:'未分类'}</span>
+        <span class="meta">#${d.id}</span>
+      </div>
+    `).join('');
+  }catch(e){
+    document.getElementById('docList').innerHTML='<div class="empty-state">加载失败: '+e.message+'</div>';
+  }
+}
+
+async function uploadFile(file){
+  if(!file)return;
+  const el=document.getElementById('uploadStatus');
+  el.style.display='block';
+  el.style.background='var(--bg-secondary)';
+  el.textContent='正在上传 '+file.name+'...';
+  const fd=new FormData();
+  fd.append('file',file);
+  try{
+    const r=await (await fetch('/api/teacher/knowledge/ingest',{method:'POST',body:fd})).json();
+    if(r.success){
+      el.style.background='#ECFDF5';el.style.color='#065F46';
+      el.textContent='✅ 上传成功！已解析为 '+r.data.chunks+' 个知识切片';
+      loadDocs();
+    }else{
+      el.style.background='#FEF2F2';el.style.color='#991B1B';
+      el.textContent='❌ 上传失败: '+r.error;
+    }
+  }catch(e){
+    el.style.background='#FEF2F2';el.style.color='#991B1B';
+    el.textContent='❌ 请求失败: '+e.message;
+  }
+}
+
+async function clearKnowledge(){
+  if(!confirm('确定要清空当前课程的知识库吗？此操作不可撤销。'))return;
+  const cid=CURRENT_COURSE?'?course_id='+CURRENT_COURSE:'';
+  try{
+    const r=await (await fetch('/api/teacher/knowledge/clear'+cid,{method:'POST'})).json();
+    if(r.success){loadDocs();document.getElementById('docCount').textContent='已清空';}
+  }catch(e){alert('清空失败: '+e.message);}
+}
+
+loadDocs();
+</script>
+</body>
+</html>

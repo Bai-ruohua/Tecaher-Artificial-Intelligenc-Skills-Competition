@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 - Python课程AI智能教学平台</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.login-wrap { max-width: 420px; margin: 60px auto; }
+.login-card {
+  background: var(--bg-card); border-radius: 16px; padding: 40px 36px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.login-title { text-align: center; font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+.login-sub { text-align: center; font-size: 13px; color: var(--text-secondary); margin-bottom: 32px; }
+.form-group { margin-bottom: 20px; }
+.form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-primary); }
+.form-input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px; box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.form-input:focus { outline: none; border-color: var(--primary); }
+.role-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.role-tab {
+  flex: 1; padding: 8px; text-align: center; border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; font-size: 13px; transition: all 0.2s;
+}
+.role-tab.active { border-color: var(--primary); background: var(--bg-primary); color: var(--primary); font-weight: 500; }
+.btn-login {
+  width: 100%; padding: 12px; background: var(--primary); color: #fff;
+  border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: opacity 0.2s;
+}
+.btn-login:hover { opacity: 0.9; }
+.btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-hint { text-align: center; margin-top: 16px; font-size: 12px; color: var(--text-tertiary); }
+.error-msg { color: var(--danger); font-size: 13px; text-align: center; margin-bottom: 12px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-title">{{ config.SCHOOL_NAME }}</div>
+    <div class="login-sub">{{ config.COURSE_NAME }} · AI智能教学平台</div>
+
+    <div class="error-msg" id="error"></div>
+
+    <div class="role-tabs">
+      <div class="role-tab active" onclick="setRole('auto')" id="tab-auto">自动识别</div>
+      <div class="role-tab" onclick="setRole('teacher')" id="tab-teacher">教师登录</div>
+      <div class="role-tab" onclick="setRole('student')" id="tab-student">学生登录</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">用户名 / 学号</label>
+      <input class="form-input" id="username" placeholder="请输入用户名或学号" autocomplete="username">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">密码</label>
+      <input class="form-input" id="password" type="password" placeholder="请输入密码" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+
+    <button class="btn-login" id="btnLogin" onclick="doLogin()">登 录</button>
+
+    <div class="login-hint">
+      默认教师账号：admin / admin123<br>
+      学生账号由教师批量创建，初始密码 123456
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedRole = 'auto';
+
+function setRole(role) {
+  selectedRole = role;
+  ['auto', 'teacher', 'student'].forEach(r => {
+    document.getElementById('tab-' + r).classList.toggle('active', r === role);
+  });
+}
+
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl = document.getElementById('error');
+  const btn = document.getElementById('btnLogin');
+
+  if (!username || !password) {
+    errEl.textContent = '请输入用户名和密码';
+    return;
+  }
+
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = '登录中...';
+
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role: selectedRole }),
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      window.location.href = data.data.redirect;
+    } else {
+      errEl.textContent = data.error || '登录失败';
+      btn.disabled = false;
+      btn.textContent = '登 录';
+    }
+  } catch (e) {
+    errEl.textContent = '网络错误，请重试';
+    btn.disabled = false;
+    btn.textContent = '登 录';
+  }
+}
+</script>
+</body>
+</html>

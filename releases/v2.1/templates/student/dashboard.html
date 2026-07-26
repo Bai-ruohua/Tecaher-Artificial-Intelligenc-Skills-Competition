@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生仪表盘 - {{ config.COURSE_NAME }}AI智能教学平台</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+.metric-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.metric-card { background: var(--bg-secondary); border-radius: 8px; padding: 16px; }
+.metric-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.metric-value { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.chart-title { font-size: 15px; font-weight: 500; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 300px; }
+.rank-card { text-align: center; padding: 20px; }
+.rank-num { font-size: 48px; font-weight: 700; color: var(--primary); }
+.rank-total { font-size: 14px; color: var(--text-secondary); }
+.feature-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.feature-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--student, #1D9E75); border-radius: 8px; padding: 20px; text-decoration: none; color: inherit; transition: transform 0.2s; }
+.feature-card:hover { transform: translateY(-2px); }
+.feature-card .icon { font-size: 28px; margin-bottom: 8px; }
+.feature-card .title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.feature-card .desc { font-size: 12px; color: var(--text-secondary); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { font-weight: 500; color: var(--text-secondary); background: var(--bg-secondary); }
+.gantt-bar { display: inline-block; height: 18px; border-radius: 4px; vertical-align: middle; }
+.gantt-mastered { background: #1D9E75; }
+.gantt-progress { background: #378ADD; }
+.gantt-weak { background: #EF9F27; }
+.gantt-vweak { background: #E24B4A; }
+.gantt-none { background: #ddd; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/student/dashboard" class="navbar-brand">{{ config.SCHOOL_NAME }} · 学生学习中心</a>
+  <div class="navbar-nav">
+    <a href="/student/dashboard" class="nav-link">仪表盘</a>
+    <a href="/student/qa" class="nav-link">RAG问答</a>
+    <a href="/student/quiz" class="nav-link">刷题</a>
+    <a href="/student/digital" class="nav-link">数字人</a>
+    <a href="/student/graph" class="nav-link">知识图谱</a>
+    <span style="font-size:13px;color:var(--text-secondary);margin:0 8px">{{ student.student_name }}</span>
+    <a href="/logout" class="nav-link" style="color:var(--danger)">退出</a>
+  </div>
+</nav>
+
+<div class="container">
+  <h2 style="margin-bottom:8px;font-size:20px">我的学习仪表盘</h2>
+  <p style="color:var(--text-secondary);margin-bottom:20px">
+    欢迎回来，{{ student.student_name }}！
+    {% if courses %}当前课程：{{ courses[0].course_name }}（{{ courses[0].teacher_name }}老师）{% endif %}
+  </p>
+
+  <div class="metric-row">
+    <div class="metric-card rank-card">
+      <div class="metric-label">我的排名</div>
+      <div class="rank-num" id="m-rank">-</div>
+      <div class="rank-total" id="m-rank-total"></div>
+    </div>
+    <div class="metric-card"><div class="metric-label">答题总数</div><div class="metric-value" id="m-attempts">-</div></div>
+    <div class="metric-card"><div class="metric-label">正确率</div><div class="metric-value" id="m-accuracy">-</div></div>
+    <div class="metric-card"><div class="metric-label">错题数</div><div class="metric-value" id="m-wrong">-</div></div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="chart-card">
+      <div class="chart-title">我的能力雷达图</div>
+      <div class="chart-wrap"><canvas id="radarChart" role="img" aria-label="个人能力雷达图"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">知识掌握甘特图</div>
+      <div id="ganttChart" style="height:300px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:24px">
+    <div class="chart-title">学习入口</div>
+    <div class="feature-grid">
+      <a href="/student/qa" class="feature-card"><div class="icon">💬</div><div class="title">RAG问答</div><div class="desc">基于课件的智能问答</div></a>
+      <a href="/student/quiz" class="feature-card"><div class="icon">🎯</div><div class="title">刷题训练</div><div class="desc">按章节随机出题判分</div></a>
+      <a href="/student/digital" class="feature-card"><div class="icon">🎙️</div><div class="title">数字人讲解</div><div class="desc">克隆教师声音讲解</div></a>
+      <a href="/student/graph" class="feature-card"><div class="icon">🕸️</div><div class="title">知识图谱</div><div class="desc">知识点关系可视化</div></a>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadDashboard() {
+  try {
+    const resp = await fetch('/api/student/dashboard');
+    const json = await resp.json();
+    if (!json.success) return;
+    const d = json.data;
+
+    document.getElementById('m-attempts').textContent = d.stats.total_attempts || 0;
+    document.getElementById('m-accuracy').textContent = (d.stats.accuracy || 0) + '%';
+    document.getElementById('m-wrong').textContent = d.wrong_count || 0;
+    document.getElementById('m-rank').textContent = d.rank_info.rank || '-';
+    document.getElementById('m-rank-total').textContent = '共 ' + (d.rank_info.total_students || d.rank_info.total || '?') + ' 人';
+
+    renderRadar(d.radar);
+    renderGantt(d.gantt);
+  } catch(e) {
+    console.error('Load error:', e);
+  }
+}
+
+function renderRadar(radar) {
+  const ctx = document.getElementById('radarChart');
+  if (window._radarChart) window._radarChart.destroy();
+
+  window._radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: radar.map(r => r.label),
+      datasets: [{
+        label: '我的能力',
+        data: radar.map(r => r.score),
+        backgroundColor: 'rgba(29, 158, 117, 0.15)',
+        borderColor: 'rgba(29, 158, 117, 0.8)',
+        borderWidth: 2,
+        pointBackgroundColor: 'rgba(29, 158, 117, 1)',
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 11 } }, pointLabels: { font: { size: 12 } } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderGantt(gantt) {
+  const container = document.getElementById('ganttChart');
+  if (!gantt || gantt.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-tertiary);padding:40px">暂无数据，开始刷题后自动生成</div>';
+    return;
+  }
+
+  const levelClass = { mastered: 'gantt-mastered', in_progress: 'gantt-progress', weak: 'gantt-weak', very_weak: 'gantt-vweak', not_started: 'gantt-none' };
+  const levelLabel = { mastered: '已掌握', in_progress: '进行中', weak: '薄弱', very_weak: '很弱', not_started: '未开始' };
+
+  let html = '<table><thead><tr><th>章节</th><th>掌握度</th><th>状态</th><th>答题</th></tr></thead><tbody>';
+  for (const g of gantt) {
+    const cls = levelClass[g.mastery_level] || 'gantt-none';
+    const label = levelLabel[g.mastery_level] || '-';
+    html += `<tr>
+      <td style="font-size:12px">${g.chapter_title}</td>
+      <td><div class="gantt-bar ${cls}" style="width:${g.mastery_percent}%"></div> ${g.mastery_percent}%</td>
+      <td style="font-size:12px">${label}</td>
+      <td style="font-size:12px">${g.attempt_count}题 对${g.correct_count}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
