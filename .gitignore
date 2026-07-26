@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+env/
+data/db/*.db
+data/vectors/
+data/chroma_db/
+data/digital_human_cache/
+data/tts_cache/
+data/uploads/
+.env
+static/videos/*.mp4
+.DS_Store
+.DS_Store*
+
+# 临时/测试文件
+_diag.py
+_t.txt
+_test_upload.txt
+overview.md
+
+_push_to_github.py
